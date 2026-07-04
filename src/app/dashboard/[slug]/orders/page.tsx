@@ -82,8 +82,6 @@ export default function OrdersPage() {
 
   return (
     <div style={{ position: 'relative' }}>
-
-      {/* Flash nuevo pedido */}
       <AnimatePresence>
         {flash && (
           <motion.div
@@ -103,7 +101,6 @@ export default function OrdersPage() {
         )}
       </AnimatePresence>
 
-      {/* Notificación */}
       <AnimatePresence>
         {notification && (
           <motion.div
@@ -134,7 +131,6 @@ export default function OrdersPage() {
         )}
       </AnimatePresence>
 
-      {/* Header */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
@@ -172,23 +168,18 @@ export default function OrdersPage() {
           <motion.div
             animate={{ opacity: [1, 0.2, 1] }}
             transition={{ duration: 1.5, repeat: Infinity }}
-            style={{
-              width: 5,
-              height: 5,
-              borderRadius: '50%',
-              background: '#10b981'
-            }}
+            style={{ width: 5, height: 5, borderRadius: '50%', background: '#10b981' }}
           />
           EN VIVO
         </div>
       </div>
 
-      {/* Tarjetas */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
         <AnimatePresence>
           {pedidos.map((pedido, i) => {
             const nextStatus = statusFlow[pedido.status]
             const cfg = statusConfig[pedido.status]
+            const nextCfg = nextStatus ? statusConfig[nextStatus] : null
             return (
               <motion.div
                 key={pedido.id}
@@ -204,26 +195,153 @@ export default function OrdersPage() {
                 whileHover={{ y: -2, scale: 1.003 }}
                 style={{
                   background: 'rgba(255,255,255,0.022)',
-                  border: `1px solid ${cfg.color}28`,
-                  borderLeft: `2px solid ${cfg.color}`,
+                  border: '1px solid ' + cfg.color + '28',
+                  borderLeft: '2px solid ' + cfg.color,
                   borderRadius: '14px',
                   padding: '1.4rem 1.8rem',
                   backdropFilter: 'blur(20px)',
-                  boxShadow: `0 0 25px ${cfg.glow}, 0 15px 35px rgba(0,0,0,0.25)`,
+                  boxShadow: '0 0 25px ' + cfg.glow + ', 0 15px 35px rgba(0,0,0,0.25)',
                   position: 'relative',
                   overflow: 'hidden'
                 }}
               >
-                {/* Línea superior de color */}
                 <div style={{
                   position: 'absolute',
                   top: 0,
                   left: '25%',
                   right: '25%',
                   height: '1px',
-                  background: `linear-gradient(90deg, transparent, ${cfg.color}55, transparent)`
+                  background: 'linear-gradient(90deg, transparent, ' + cfg.color + '55, transparent)'
                 }} />
 
                 <div style={{
                   display: 'grid',
                   gridTemplateColumns: '65px 1fr auto',
+                  gap: '1.5rem',
+                  alignItems: 'start'
+                }}>
+                  <div style={{ textAlign: 'center' }}>
+                    <p style={{ fontSize: '1.15rem', fontWeight: 800, margin: 0, letterSpacing: '-0.03em' }}>
+                      {pedido.hora}
+                    </p>
+                    <p style={{ fontSize: '0.62rem', color: cfg.color, margin: '3px 0 0', letterSpacing: '0.08em', fontWeight: 600 }}>
+                      {pedido.tiempo}
+                    </p>
+                  </div>
+
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.8rem', flexWrap: 'wrap' }}>
+                      <p style={{ fontWeight: 700, fontSize: '0.92rem', margin: 0 }}>
+                        {pedido.cliente}
+                      </p>
+                      <span style={{
+                        background: cfg.color + '18',
+                        border: '1px solid ' + cfg.color + '35',
+                        borderRadius: '100px',
+                        padding: '0.18rem 0.7rem',
+                        fontSize: '0.62rem',
+                        fontWeight: 700,
+                        color: cfg.color,
+                        letterSpacing: '0.1em',
+                        textTransform: 'uppercase'
+                      }}>
+                        {cfg.label}
+                      </span>
+                      <span style={{
+                        background: 'rgba(255,255,255,0.04)',
+                        border: '1px solid rgba(255,255,255,0.08)',
+                        borderRadius: '100px',
+                        padding: '0.18rem 0.7rem',
+                        fontSize: '0.62rem',
+                        color: 'rgba(255,255,255,0.35)',
+                        letterSpacing: '0.08em'
+                      }}>
+                        {pedido.tipo}
+                      </span>
+                    </div>
+
+                    {pedido.productos.map((p, j) => (
+                      <div key={j} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.28rem', fontSize: '0.83rem' }}>
+                        <span style={{
+                          background: 'rgba(255,255,255,0.05)',
+                          borderRadius: '5px',
+                          padding: '0.08rem 0.35rem',
+                          fontSize: '0.68rem',
+                          fontWeight: 700,
+                          color: 'rgba(255,255,255,0.4)',
+                          minWidth: '24px',
+                          textAlign: 'center'
+                        }}>
+                          x{p.cantidad}
+                        </span>
+                        <span style={{ fontWeight: 500, color: 'rgba(255,255,255,0.85)' }}>
+                          {p.nombre}
+                        </span>
+                        {p.nota ? (
+                          <span style={{ color: 'rgba(255,255,255,0.25)', fontSize: '0.72rem' }}>
+                            — {p.nota}
+                          </span>
+                        ) : null}
+                        {p.precio > 0 ? (
+                          <span style={{ marginLeft: 'auto', color: 'rgba(255,255,255,0.3)', fontSize: '0.72rem' }}>
+                            ${p.precio * p.cantidad}
+                          </span>
+                        ) : null}
+                      </div>
+                    ))}
+
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      marginTop: '0.8rem',
+                      paddingTop: '0.8rem',
+                      borderTop: '1px solid rgba(255,255,255,0.04)'
+                    }}>
+                      <p style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.22)', margin: 0 }}>
+                        {pedido.telefono}
+                      </p>
+                      <p style={{ fontSize: '1.05rem', fontWeight: 800, margin: '0 0 0 auto', color: '#fff' }}>
+                        ${pedido.total}
+                        <span style={{ fontSize: '0.62rem', fontWeight: 400, color: 'rgba(255,255,255,0.25)', marginLeft: '4px' }}>
+                          MXN
+                        </span>
+                      </p>
+                    </div>
+                  </div>
+
+                  <div style={{ paddingTop: '2px' }}>
+                    {nextCfg ? (
+                      <motion.button
+                        whileHover={{ y: -3, boxShadow: '0 8px 20px ' + nextCfg.glow }}
+                        whileTap={{ y: 2, scale: 0.94 }}
+                        onClick={() => avanzar(pedido.id)}
+                        style={{
+                          background: nextCfg.color + '18',
+                          border: '1px solid ' + nextCfg.color + '35',
+                          borderRadius: '100px',
+                          padding: '0.5rem 1.2rem',
+                          color: nextCfg.color,
+                          fontSize: '0.72rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          letterSpacing: '0.05em',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        {nextCfg.label}
+                      </motion.button>
+                    ) : (
+                      <span style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.15)', letterSpacing: '0.1em' }}>
+                        Finalizado
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </motion.div>
+            )
+          })}
+        </AnimatePresence>
+      </div>
+    </div>
+  )
+}
