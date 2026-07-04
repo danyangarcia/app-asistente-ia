@@ -23,7 +23,6 @@ export default function LoadingScreen({ businessName }: { businessName: string }
           overflow: 'hidden',
           background: '#0a0a0a'
         }}>
-          {/* Mitad superior */}
           <motion.div
             initial={{ y: 0 }}
             exit={{ y: '-100%' }}
@@ -36,8 +35,6 @@ export default function LoadingScreen({ businessName }: { businessName: string }
               zIndex: 2
             }}
           />
-
-          {/* Mitad inferior */}
           <motion.div
             initial={{ y: 0 }}
             exit={{ y: '100%' }}
@@ -50,8 +47,6 @@ export default function LoadingScreen({ businessName }: { businessName: string }
               zIndex: 2
             }}
           />
-
-          {/* Nombre del negocio en 3D */}
           <motion.div
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -65,20 +60,7 @@ export default function LoadingScreen({ businessName }: { businessName: string }
               textTransform: 'uppercase',
               letterSpacing: '0.1em',
               color: '#ffffff',
-              textShadow: `
-                0px 1px 0px #cccccc,
-                0px 2px 0px #bbbbbb,
-                0px 3px 0px #aaaaaa,
-                0px 4px 0px #999999,
-                0px 5px 0px #888888,
-                0px 6px 1px rgba(0,0,0,0.1),
-                0px 0px 5px rgba(0,0,0,0.1),
-                0px 1px 3px rgba(0,0,0,0.3),
-                0px 3px 5px rgba(0,0,0,0.2),
-                0px 5px 10px rgba(0,0,0,0.25),
-                0px 10px 10px rgba(0,0,0,0.2),
-                0px 20px 20px rgba(0,0,0,0.15)
-              `,
+              textShadow: '0px 1px 0px #ccc, 0px 2px 0px #bbb, 0px 3px 0px #aaa, 0px 4px 0px #999, 0px 5px 10px rgba(0,0,0,0.5)',
               margin: 0,
               lineHeight: 1
             }}>
@@ -89,3 +71,18 @@ export default function LoadingScreen({ businessName }: { businessName: string }
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.4, duration: 0.5 }}
               style={{
+                color: '#666',
+                fontSize: '0.9rem',
+                letterSpacing: '0.3em',
+                textTransform: 'uppercase',
+                marginTop: '1rem'
+              }}
+            >
+              Sistema de pedidos
+            </motion.p>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+  )
+}
