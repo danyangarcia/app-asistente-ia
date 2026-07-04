@@ -2,11 +2,11 @@
 import { motion, AnimatePresence } from 'framer-motion'
 import { useState, useEffect } from 'react'
 
-const statusConfig: Record<string, { label: string; color: string; glow: string }> = {
-  new: { label: 'Nuevo', color: '#ef4444', glow: 'rgba(239,68,68,0.2)' },
-  in_progress: { label: 'En preparacion', color: '#f59e0b', glow: 'rgba(245,158,11,0.2)' },
-  ready: { label: 'Listo', color: '#10b981', glow: 'rgba(16,185,129,0.2)' },
-  completed: { label: 'Completado', color: '#374151', glow: 'rgba(55,65,81,0.1)' }
+const statusConfig: Record<string, { label: string; color: string }> = {
+  new: { label: 'Nuevo', color: '#ef4444' },
+  in_progress: { label: 'En preparacion', color: '#f59e0b' },
+  ready: { label: 'Listo', color: '#10b981' },
+  completed: { label: 'Completado', color: '#374151' }
 }
 
 const statusFlow: Record<string, string> = {
@@ -147,12 +147,7 @@ export default function OrdersPage() {
           }}>
             Modulo activo
           </p>
-          <h2 style={{
-            fontSize: '1rem',
-            fontWeight: 700,
-            letterSpacing: '0.05em',
-            margin: 0
-          }}>
+          <h2 style={{ fontSize: '1rem', fontWeight: 700, letterSpacing: '0.05em', margin: 0 }}>
             Pedidos en tiempo real
           </h2>
         </div>
@@ -195,23 +190,23 @@ export default function OrdersPage() {
                 whileHover={{ y: -2, scale: 1.003 }}
                 style={{
                   background: 'rgba(255,255,255,0.022)',
-                  border: '1px solid ' + cfg.color + '28',
+                  border: '1px solid ' + cfg.color + '40',
                   borderLeft: '2px solid ' + cfg.color,
                   borderRadius: '14px',
                   padding: '1.4rem 1.8rem',
                   backdropFilter: 'blur(20px)',
-                  boxShadow: '0 0 25px ' + cfg.glow + ', 0 15px 35px rgba(0,0,0,0.25)',
                   position: 'relative',
                   overflow: 'hidden'
                 }}
               >
+                {/* Solo línea superior de color sin glow */}
                 <div style={{
                   position: 'absolute',
                   top: 0,
                   left: '25%',
                   right: '25%',
                   height: '1px',
-                  background: 'linear-gradient(90deg, transparent, ' + cfg.color + '55, transparent)'
+                  background: 'linear-gradient(90deg, transparent, ' + cfg.color + '60, transparent)'
                 }} />
 
                 <div style={{
@@ -235,8 +230,8 @@ export default function OrdersPage() {
                         {pedido.cliente}
                       </p>
                       <span style={{
-                        background: cfg.color + '18',
-                        border: '1px solid ' + cfg.color + '35',
+                        background: 'transparent',
+                        border: '1px solid ' + cfg.color + '60',
                         borderRadius: '100px',
                         padding: '0.18rem 0.7rem',
                         fontSize: '0.62rem',
@@ -248,8 +243,8 @@ export default function OrdersPage() {
                         {cfg.label}
                       </span>
                       <span style={{
-                        background: 'rgba(255,255,255,0.04)',
-                        border: '1px solid rgba(255,255,255,0.08)',
+                        background: 'transparent',
+                        border: '1px solid rgba(255,255,255,0.1)',
                         borderRadius: '100px',
                         padding: '0.18rem 0.7rem',
                         fontSize: '0.62rem',
@@ -261,7 +256,13 @@ export default function OrdersPage() {
                     </div>
 
                     {pedido.productos.map((p, j) => (
-                      <div key={j} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.28rem', fontSize: '0.83rem' }}>
+                      <div key={j} style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        marginBottom: '0.28rem',
+                        fontSize: '0.83rem'
+                      }}>
                         <span style={{
                           background: 'rgba(255,255,255,0.05)',
                           borderRadius: '5px',
@@ -312,12 +313,12 @@ export default function OrdersPage() {
                   <div style={{ paddingTop: '2px' }}>
                     {nextCfg ? (
                       <motion.button
-                        whileHover={{ y: -3, boxShadow: '0 8px 20px ' + nextCfg.glow }}
+                        whileHover={{ y: -3 }}
                         whileTap={{ y: 2, scale: 0.94 }}
                         onClick={() => avanzar(pedido.id)}
                         style={{
-                          background: nextCfg.color + '18',
-                          border: '1px solid ' + nextCfg.color + '35',
+                          background: 'transparent',
+                          border: '1px solid ' + nextCfg.color + '60',
                           borderRadius: '100px',
                           padding: '0.5rem 1.2rem',
                           color: nextCfg.color,
