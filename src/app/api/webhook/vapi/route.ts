@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON payload" }, { status: 400 });
   }
 
-  // Extracción segura de mensajes sin errores de tipado de TypeScript
+  // 1. Validamos si el cliente confirmó el pedido diciendo que sí
   const messageObj = payload as any;
   const messages = messageObj.message?.artifact?.messages || messageObj.messages || [];
   
@@ -48,19 +48,22 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, message: "Waiting for confirmation" }, { status: 200 });
   }
 
-  // Inserción directa respetando tu columna business_slug
+  // 2. Insertamos el pedido utilizando la estructura limpia
   const orderInsert = await supabaseAdmin
     .from("orders")
     .insert({
       business_slug: "tacos-luis",
-      source: "voice_call",
-      customer_name: "Danyan Garcia",
-      customer_phone: "6381234567",
-      order_type: "domicilio",
-      delivery_address: "Calle 10 y Avenida Serdán #142",
-      status: "new",
-      total_amount: 215,
-      notes: "5 tacos de cabeza, tortilla de maíz. (Pedido confirmado por voz)",
+      cliente_nombre: "Danyan Garcia",
+      cliente_telefono: "6381234567",
+      tipo: "domicilio",
+      direccion: "Calle 10 y Avenida Serdán #142",
+      hora: new Date().toLocaleTimeString("es-MX", { hour: '2-digit', minute: '2-digit' }),
+      items: [
+        { cantidad: 5, taco: "cabeza", tortilla: "maíz" }
+      ],
+      total: 215,
+      estado: "new",
+      origen: "voice_call"
     })
     .select("id")
     .single();
