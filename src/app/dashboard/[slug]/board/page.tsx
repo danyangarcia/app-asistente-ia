@@ -20,7 +20,11 @@ export interface Order {
 
 export default function BoardPage() {
   const pathname = usePathname()
-  const slug = pathname.split('/')[2]
+  
+  // Captura inteligente del slug independiente de las barras diagonales extras
+  const segments = pathname.split('/').filter(Boolean)
+  const slug = segments.length >= 2 ? segments[1] : 'tacos-luis'
+  
   const supabase = createClient()
 
   const [orders, setOrders] = useState<Order[]>([])
@@ -77,7 +81,6 @@ export default function BoardPage() {
   }, [slug, supabase])
 
   const updateStatus = async (id: string, nuevoEstado: Order['estado'], extraData = {}) => {
-    // Actualización optimista local inmediata para que no esperes el websocket
     setOrders((prev) =>
       prev.map((o) => (o.id === id ? { ...o, estado: nuevoEstado, ...extraData } : o))
     )
@@ -123,7 +126,7 @@ export default function BoardPage() {
       <header style={{ marginBottom: '2rem', borderBottom: '1px solid #1f2937', paddingBottom: '1rem' }}>
         <h2 style={{ fontSize: '1.4rem', fontWeight: 'bold', margin: 0 }}>Pedidos y Solicitudes en Vivo</h2>
         <p style={{ color: '#9ca3af', fontSize: '0.85rem', margin: '0.2rem 0 0 0' }}>
-          Panel simplificado de la actividad de tu negocio.
+          Panel simplificado de la actividad de tu negocio ({slug}).
         </p>
       </header>
 
@@ -169,12 +172,12 @@ export default function BoardPage() {
                     {Array.isArray(order.items) && order.items.length > 0 ? (
                       order.items.map((prod: any, idx: number) => (
                         <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', color: '#e5e7eb', padding: '0.15rem 0' }}>
-                          <span>{prod.cantidad || 1}x {prod.nombre}</span>
+                          <span>{prod.cantidad || 1}x {prod.taco || prod.nombre || 'Producto'} ({prod.tortilla || 'maíz'})</span>
                           <span style={{ color: '#9ca3af' }}>${(prod.precio || 0) * (prod.cantidad || 1)}</span>
                         </div>
                       ))
                     ) : (
-                      <div style={{ color: '#9ca3af', fontStyle: 'italic' }}>Sin productos especificados (Reserva o consulta directa)</div>
+                      <div style={{ color: '#9ca3af', fontStyle: 'italic' }}>Sin productos especificados</div>
                     )}
                   </div>
 
@@ -187,7 +190,7 @@ export default function BoardPage() {
                   {cancellingId === order.id && (
                     <div style={{ background: '#1f2937', padding: '0.75rem', borderRadius: '0.5rem', marginBottom: '1rem', border: '1px solid #ef4444' }}>
                       <p style={{ fontSize: '0.85rem', margin: '0 0 0.5rem 0', fontWeight: 'bold', color: '#f87171' }}>¿Por qué se cancela este pedido?</p>
-                      <input type="text" placeholder="Ej. No hay producto, cliente colgó, datos incorrectos..." value={razon} onChange={(e) => setRazon(e.target.value)}
+                      <input type="text" placeholder="Ej. No hay producto, cliente colgó..." value={razon} onChange={(e) => setRazon(e.target.value)}
                         style={{ width: '100%', padding: '0.5rem', background: '#111827', border: '1px solid #374151', color: '#fff', borderRadius: '0.3rem', marginBottom: '0.5rem', fontSize: '0.85rem' }} />
                       <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
                         <button onClick={() => setCancellingId(null)} style={{ background: 'transparent', border: '1px solid #4b5563', color: '#9ca3af', padding: '0.3rem 0.7rem', borderRadius: '0.3rem', fontSize: '0.8rem', cursor: 'pointer' }}>Volver</button>
