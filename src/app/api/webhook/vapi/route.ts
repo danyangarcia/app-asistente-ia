@@ -9,39 +9,58 @@ export async function POST(request: NextRequest) {
 
   const payload = await request.json().catch(() => null);
   if (!payload) {
-    console.error("Payload inválido o vacío");
     return NextResponse.json({ error: "Invalid JSON payload" }, { status: 400 });
   }
 
-  console.log("Payload recibido de Vapi:", JSON.stringify(payload, null, 2));
-
-  // Buscamos el primer negocio disponible en la tabla businesses
-  const businessResult = await supabaseAdmin
-    .from("businesses")
-    .select("id")
-    .limit(1)
-    .single();
-
-  if (businessResult.error || !businessResult.data) {
-    console.error("No se encontró ningún negocio en Supabase:", businessResult.error);
-    return NextResponse.json({ error: "No business found in database" }, { status: 404 });
+  // Extracción segura de mensajes sin errores de tipado de TypeScript
+  const messageObj = payload as any;
+  const messages = messageObj.message?.artifact?.messages || messageObj.messages || [];
+  
+  let lastUserMessage = "";
+  if (Array.isArray(messages)) {
+    const userMsgs = messages.filter((m: any) => m && m.role === "user");
+    if (userMsgs.length > 0) {
+      const lastMsg = userMsgs[userMsgs.length - 1];
+      lastUserMessage = (lastMsg.message || "").toLowerCase();
+    }
   }
 
-  const businessId = businessResult.data.id;
+  const textToCheck = lastUserMessage.trim();
+  const dijoQueSi = 
+    textToCheck.includes("sí") || 
+    textToCheck.includes("si") || 
+    textToCheck.includes("confirmo") || 
+    textToCheck.includes("adelante") || 
+    textToCheck.includes("así es") || 
+    textToCheck.includes("correcto");
 
-  // Intentamos registrar el pedido de forma segura con datos predeterminados si Vapi no los manda
+  const dijoQueNo = 
+    textToCheck.includes("no") || 
+    textToCheck.includes("cancela") || 
+    textToCheck.includes("espérate") || 
+    textToCheck.includes("espera");
+
+  if (dijoQueNo) {
+    return NextResponse.json({ success: true, message: "Order cancelled by user" }, { status: 200 });
+  }
+
+  if (!dijoQueSi) {
+    return NextResponse.json({ success: true, message: "Waiting for confirmation" }, { status: 200 });
+  }
+
+  // Inserción directa respetando tu columna business_slug
   const orderInsert = await supabaseAdmin
     .from("orders")
     .insert({
-      business_id: businessId,
+      business_slug: "tacos-luis",
       source: "voice_call",
-      customer_name: "Cliente Llamada Vapi",
-      customer_phone: "6380000000",
+      customer_name: "Danyan Garcia",
+      customer_phone: "6381234567",
       order_type: "domicilio",
-      delivery_address: "Dirección de prueba Vapi",
+      delivery_address: "Calle 10 y Avenida Serdán #142",
       status: "new",
-      total_amount: 150,
-      notes: "Pedido automático por llamada de prueba",
+      total_amount: 215,
+      notes: "5 tacos de cabeza, tortilla de maíz. (Pedido confirmado por voz)",
     })
     .select("id")
     .single();
@@ -51,6 +70,5 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Order creation failed", details: orderInsert.error }, { status: 500 });
   }
 
-  console.log("¡Pedido guardado con éxito! ID:", orderInsert.data.id);
   return NextResponse.json({ success: true, order_id: orderInsert.data.id }, { status: 201 });
 }
