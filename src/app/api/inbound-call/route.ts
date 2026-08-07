@@ -8,71 +8,45 @@ export async function POST(request: NextRequest) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    // Vapi manda la info por POST, pero podemos leer el slug de la URL que le configuremos
     const { searchParams } = new URL(request.url);
     const businessSlug = searchParams.get("business_slug");
 
-    if (!businessSlug) {
-      return NextResponse.json({ error: "Falta el business_slug" }, { status: 400 });
-    }
+    if (!businessSlug) return NextResponse.json({ error: "Falta slug" }, { status: 400 });
 
-    // 1. Buscar el negocio y sus horarios en Supabase
+    // 1. Buscamos TODO, incluyendo el prompt que guardaste en la DB
     const { data: business, error } = await supabaseAdmin
       .from("businesses")
-      .select("nombre, hora_apertura, hora_cierre")
+      .select("nombre, hora_apertura, hora_cierre, prompt_config") 
       .eq("slug", businessSlug)
       .single();
 
-    if (error || !business) {
-      return NextResponse.json({ error: "Negocio no encontrado" }, { status: 404 });
-    }
+    if (error || !business) return NextResponse.json({ error: "Negocio no encontrado" }, { status: 404 });
 
-    // 2. Obtener la hora actual exacta en Sonora (Caborca)
-    // Esto te da un formato de 24 hrs tipo "14:30"
+    // 2. Validar horario (mismo lógica)
     const horaActualSonora = new Date().toLocaleTimeString("en-US", {
-      timeZone: "America/Hermosillo", // Zona horaria de Sonora (sin horario de verano)
+      timeZone: "America/Hermosillo",
       hour12: false,
       hour: "2-digit",
       minute: "2-digit",
     });
 
-    // 3. Validar si está abierto o cerrado
     const estaAbierto = horaActualSonora >= business.hora_apertura && horaActualSonora <= business.hora_cierre;
 
-    // 4. Armar el prompt dependiendo del estado
-    let promptDinamico = "";
+    // 3. Selección dinámica: Si está cerrado, mandamos un mensaje genérico, 
+    // pero si está abierto, usamos el prompt que definiste en la base de datos para ese negocio
+    const content = estaAbierto 
+      ? business.prompt_config // <--- ¡AQUÍ ESTÁ LA MAGIA! Jala el prompt de la DB
+      : `Eres un asistente de ${business.nombre}. El negocio está cerrado. Horario: ${business.hora_apertura} a ${business.hora_cierre}. Informa esto y despídete amablemente.`;
 
-    if (estaAbierto) {
-      // AQUÍ VA EL PROMPT LARGO DE TOMAR PEDIDOS 
-      promptDinamico = `Eres Gaby, una chica norteña de Caborca, Sonora, que trabaja en ${business.nombre}.
-      Atiendes llamadas de forma natural, amable y rápida... 
-      (Aquí pegas el resto de tu prompt normal de ventas, asegurándote de usar la URL de tu API de menú)`;
-    } else {
-      // AQUÍ VA EL PROMPT DE CERRADO
-      promptDinamico = `Eres Gaby, trabajas en ${business.nombre}. 
-      Actualmente el negocio ESTÁ CERRADO. Nuestro horario de atención es de ${business.hora_apertura} a ${business.hora_cierre}.
-      Regla estricta:
-      - Saluda amablemente.
-      - Informa al cliente que en este momento el negocio está cerrado.
-      - NO tomes ningún pedido bajo ninguna circunstancia.
-      - Despídete cordialmente de forma rápida y natural.`;
-    }
-
-    // 5. Responderle a Vapi con el asistente actualizado
     return NextResponse.json({
       assistant: {
         model: {
-          messages: [
-            {
-              role: "system",
-              content: promptDinamico
-            }
-          ]
+          messages: [{ role: "system", content: content }]
         }
       }
     });
 
   } catch (error) {
-    return NextResponse.json({ error: "Error procesando la llamada" }, { status: 500 });
+    return NextResponse.json({ error: "Error" }, { status: 500 });
   }
 }
