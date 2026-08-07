@@ -8,29 +8,43 @@ export async function POST(request: Request) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    // Opcional: puedes leer el body que manda Vapi/OpenAI si lo necesitas luego
-    await request.json().catch(() => null);
+    const body = await request.json().catch(() => ({}));
+    const messages = body.messages || [];
 
-    // Buscamos directamente el negocio en Supabase para asegurar que devuelva el menú
+    // Consultamos el menú y prompt directamente en Supabase para Tacos Luis
     const { data: business, error } = await supabaseAdmin
       .from("businesses")
       .select('"Nombre del negocio", prompt_config')
       .eq("enlace del panel", "tacos-luis")
       .single();
 
-    let systemPrompt = "Bienvenido a Tacos Luis.";
+    let systemPrompt = "Eres Gaby, la asistente virtual de Tacos Luis.";
     if (!error && business && business.prompt_config) {
       systemPrompt = business.prompt_config;
     }
 
-    // RESPUESTA CON FORMATO ESTÁNDAR OPENAI CHAT COMPLETIONS (Exigido por Custom LLM)
+    // Insertamos el prompt de Supabase al principio del historial que manda Vapi
+    const fullMessages = [
+      { role: "system", content: systemPrompt },
+      ...messages
+    ];
+
+    // Llamada opcional a un proveedor externo (como OpenAI/Anthropic) o respondemos directo
+    // Como Vapi Custom LLM espera que el servidor actúe como el modelo, 
+    // le devolvemos una respuesta simulada o conectada al LLM real.
+    // Si quieres que responda directo con el texto del prompt en el primer saludo:
+    
     return NextResponse.json({
+      id: "chatcmpl-" + Date.now(),
+      object: "chat.completion",
+      created: Math.floor(Date.now() / 1000),
+      model: "personalizada",
       choices: [
         {
           index: 0,
           message: {
             role: "assistant",
-            content: systemPrompt
+            content: "Hola, gracias por llamar a Tacos Luis. ¿En qué te puedo ayudar el día de hoy?"
           },
           finish_reason: "stop"
         }
@@ -45,7 +59,7 @@ export async function POST(request: Request) {
           index: 0,
           message: {
             role: "assistant",
-            content: "Eres un asistente de Tacos Luis. Ocurrió un error interno al cargar la base de datos."
+            content: "Ocurrió un error al procesar tu solicitud."
           },
           finish_reason: "stop"
         }
