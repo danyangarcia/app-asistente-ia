@@ -11,18 +11,23 @@ export async function POST(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const businessSlug = searchParams.get("business_slug");
 
-    if (!businessSlug) return NextResponse.json({ error: "Falta slug" }, { status: 400 });
+    if (!businessSlug) {
+      return NextResponse.json({ error: "Falta el business_slug" }, { status: 400 });
+    }
 
-    // 1. Buscamos TODO, incluyendo el prompt que guardaste en la DB
+    // 1. Buscamos usando los nombres exactos de tu tabla (respetando espacios y comillas)
     const { data: business, error } = await supabaseAdmin
       .from("businesses")
-      .select("nombre, hora_apertura, hora_cierre, prompt_config") 
-      .eq("slug", businessSlug)
+      .select('"Nombre del negocio", hora_apertura, hora_cierre, prompt_config')
+      .eq("enlace del panel", businessSlug) // Como tu slug está guardado en "enlace del panel"
       .single();
 
-    if (error || !business) return NextResponse.json({ error: "Negocio no encontrado" }, { status: 404 });
+    if (error || !business) {
+      console.error("Error buscando negocio:", error);
+      return NextResponse.json({ error: "Negocio no encontrado" }, { status: 404 });
+    }
 
-    // 2. Validar horario (mismo lógica)
+    // 2. Obtener la hora actual exacta en Sonora (Caborca)
     const horaActualSonora = new Date().toLocaleTimeString("en-US", {
       timeZone: "America/Hermosillo",
       hour12: false,
@@ -30,23 +35,31 @@ export async function POST(request: NextRequest) {
       minute: "2-digit",
     });
 
+    // 3. Validar si está abierto o cerrado
     const estaAbierto = horaActualSonora >= business.hora_apertura && horaActualSonora <= business.hora_cierre;
 
-    // 3. Selección dinámica: Si está cerrado, mandamos un mensaje genérico, 
-    // pero si está abierto, usamos el prompt que definiste en la base de datos para ese negocio
+    // 4. Seleccionar prompt de Supabase o mensaje de cerrado
+    const nombreNegocio = business["Nombre del negocio"];
+    
     const content = estaAbierto 
-      ? business.prompt_config // <--- ¡AQUÍ ESTÁ LA MAGIA! Jala el prompt de la DB
-      : `Eres un asistente de ${business.nombre}. El negocio está cerrado. Horario: ${business.hora_apertura} a ${business.hora_cierre}. Informa esto y despídete amablemente.`;
+      ? business.prompt_config 
+      : `Eres un asistente de ${nombreNegocio}. El negocio está cerrado en este momento. Nuestro horario de atención es de ${business.hora_apertura} a ${business.hora_cierre}. Informa esto al cliente de forma amable y despídete sin tomar ningún pedido.`;
 
     return NextResponse.json({
       assistant: {
         model: {
-          messages: [{ role: "system", content: content }]
+          messages: [
+            {
+              role: "system",
+              content: content
+            }
+          ]
         }
       }
     });
 
   } catch (error) {
-    return NextResponse.json({ error: "Error" }, { status: 500 });
+    console.error("Error en el servidor:", error);
+    return NextResponse.json({ error: "Error procesando la llamada" }, { status: 500 });
   }
 }
