@@ -10,30 +10,23 @@ export async function POST(request: Request) {
 
     const body = await request.json().catch(() => ({}));
     const messages = body.messages || [];
+    const lastUserMessage = messages.filter((m: any) => m.role === "user").pop()?.content || "";
 
-    // Consultamos el menú y prompt directamente en Supabase para Tacos Luis
+    // Consultamos el registro real de Tacos Luis trayendo el prompt_config de Supabase
     const { data: business, error } = await supabaseAdmin
       .from("businesses")
       .select('"Nombre del negocio", prompt_config')
       .eq("enlace del panel", "tacos-luis")
       .single();
 
-    let systemPrompt = "Eres Gaby, la asistente virtual de Tacos Luis.";
+    let systemPrompt = "Hola, bienvenido a Tacos Luis.";
     if (!error && business && business.prompt_config) {
       systemPrompt = business.prompt_config;
     }
 
-    // Insertamos el prompt de Supabase al principio del historial que manda Vapi
-    const fullMessages = [
-      { role: "system", content: systemPrompt },
-      ...messages
-    ];
+    // Usamos el contenido real del prompt_config de Supabase como la respuesta de la IA
+    let aiResponseText = systemPrompt;
 
-    // Llamada opcional a un proveedor externo (como OpenAI/Anthropic) o respondemos directo
-    // Como Vapi Custom LLM espera que el servidor actúe como el modelo, 
-    // le devolvemos una respuesta simulada o conectada al LLM real.
-    // Si quieres que responda directo con el texto del prompt en el primer saludo:
-    
     return NextResponse.json({
       id: "chatcmpl-" + Date.now(),
       object: "chat.completion",
@@ -44,7 +37,7 @@ export async function POST(request: Request) {
           index: 0,
           message: {
             role: "assistant",
-            content: "Hola, gracias por llamar a Tacos Luis. ¿En qué te puedo ayudar el día de hoy?"
+            content: aiResponseText
           },
           finish_reason: "stop"
         }
@@ -59,7 +52,7 @@ export async function POST(request: Request) {
           index: 0,
           message: {
             role: "assistant",
-            content: "Ocurrió un error al procesar tu solicitud."
+            content: "Ocurrió un error al cargar la configuración de Tacos Luis."
           },
           finish_reason: "stop"
         }
