@@ -8,6 +8,9 @@ export async function POST(request: Request) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
+    // Opcional: puedes leer el body que manda Vapi/OpenAI si lo necesitas luego
+    await request.json().catch(() => null);
+
     // Buscamos directamente el negocio en Supabase para asegurar que devuelva el menú
     const { data: business, error } = await supabaseAdmin
       .from("businesses")
@@ -15,47 +18,38 @@ export async function POST(request: Request) {
       .eq("enlace del panel", "tacos-luis")
       .single();
 
-    if (error || !business) {
-      return NextResponse.json({
-        assistant: {
-          model: {
-            messages: [
-              {
-                role: "system",
-                content: "Eres un asistente de Tacos Luis. Ocurrió un error al cargar la base de datos."
-              }
-            ]
-          }
-        }
-      });
+    let systemPrompt = "Bienvenido a Tacos Luis.";
+    if (!error && business && business.prompt_config) {
+      systemPrompt = business.prompt_config;
     }
 
-    // Devolvemos el prompt configurado en Supabase directamente a Vapi
+    // RESPUESTA CON FORMATO ESTÁNDAR OPENAI CHAT COMPLETIONS (Exigido por Custom LLM)
     return NextResponse.json({
-      assistant: {
-        model: {
-          messages: [
-            {
-              role: "system",
-              content: business.prompt_config || "Bienvenido a Tacos Luis."
-            }
-          ]
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: "assistant",
+            content: systemPrompt
+          },
+          finish_reason: "stop"
         }
-      }
+      ]
     });
 
   } catch (error) {
+    console.error("Error en Custom LLM:", error);
     return NextResponse.json({
-      assistant: {
-        model: {
-          messages: [
-            {
-              role: "system",
-              content: "Error interno en el servidor al procesar la llamada."
-            }
-          ]
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: "assistant",
+            content: "Eres un asistente de Tacos Luis. Ocurrió un error interno al cargar la base de datos."
+          },
+          finish_reason: "stop"
         }
-      }
+      ]
     });
   }
 }
