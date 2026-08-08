@@ -1,6 +1,23 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
 
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+};
+
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 200, headers: corsHeaders });
+}
+
+export async function GET() {
+  return NextResponse.json(
+    { status: "ok", mensaje: "Endpoint inbound-call activo." },
+    { status: 200, headers: corsHeaders }
+  );
+}
+
 export async function POST(request: NextRequest) {
   try {
     const supabaseAdmin = createClient(
@@ -9,30 +26,11 @@ export async function POST(request: NextRequest) {
     );
 
     const body = await request.json();
-    let businessSlug = null;
-    let toolCallId = null;
+    
+    // Asignamos el slug por defecto o lo extraemos de los metadatos de Vapi
+    const businessSlug = body.message?.call?.assistant?.metadata?.business_slug || "tacos-luis";
 
-    // Extraer el business_slug de la estructura de Vapi Tools de forma infalible
-    if (body.message?.toolCalls && body.message.toolCalls.length > 0) {
-      toolCallId = body.message.toolCalls[0].id;
-      let args = body.message.toolCalls[0].function?.arguments;
-      if (typeof args === "string") {
-        try { args = JSON.parse(args); } catch (e) {}
-      }
-      if (args && args.business_slug) {
-        businessSlug = args.business_slug;
-      }
-    }
-
-    if (!businessSlug && body.business_slug) {
-      businessSlug = body.business_slug;
-    }
-
-    if (!businessSlug) {
-      return NextResponse.json({ error: "Falta el identificador del negocio (business_slug)." }, { status: 200 });
-    }
-
-    // Consultamos la tabla 'businesses' con los nombres exactos de tus columnas
+    // Consultamos la tabla 'businesses'
     const { data: business, error } = await supabaseAdmin
       .from("businesses")
       .select('"Nombre del negocio", "Cuenta Activa", "Zona Horaria", hora_apertura, hora_cierra')
@@ -41,63 +39,53 @@ export async function POST(request: NextRequest) {
 
     if (error || !business) {
       return NextResponse.json({
-        results: toolCallId ? [{
-          toolCallId,
-          result: { estatus: "error", mensaje: "No se encontró el negocio en la base de datos." }
-        }] : { error: "Negocio no encontrado" }
-      }, { status: 200 });
+        assistant: {
+          firstMessage: "Disculpa, no pudimos localizar la información del establecimiento en este momento.",
+          endCallAfterSpokenEnabled: true
+        }
+      }, { status: 200, headers: corsHeaders });
     }
 
     // 1. Validar si la cuenta está activa
     if (business["Cuenta Activa"] === false) {
-      const responsePayload = {
-        estado_operativo: "inactivo",
-        mensaje_para_cliente: "Lo sentimos, este servicio se encuentra temporalmente inactivo."
-      };
-      return NextResponse.json(toolCallId ? { results: [{ toolCallId, result: responsePayload }] } : responsePayload, { status: 200 });
+      return NextResponse.json({
+        assistant: {
+          firstMessage: "Lo sentimos, este servicio se encuentra temporalmente inactivo. ¡Hasta luego!",
+          endCallAfterSpokenEnabled: true
+        }
+      }, { status: 200, headers: corsHeaders });
     }
 
-    // 2. Validar el horario en vivo según la Zona Horaria del negocio
-    const timeZone = business["Zona Horaria"] || "America/Mexico_City";
-    const nowInTz = new Date().toLocaleTimeString("en-GB", {
+    // 2. Validar el horario en vivo
+    const timeZone = business["Zona Horaria"] || "America/Hermosillo";
+    const horaActual = new Date().toLocaleTimeString("en-GB", {
       timeZone: timeZone,
       hour12: false
-    }); // Formato "HH:mm:ss"
+    });
 
-    const horaActual = nowInTz;
-    const horaApertura = business.hora_apertura; // Ej: "07:00:00"
-    const horaCierra = business.hora_cierra;     // Ej: "15:00:00"
+    const horaApertura = business.hora_apertura;
+    const horaCierra = business.hora_cierra;
 
     if (horaApertura && horaCierra) {
       if (horaActual < horaApertura || horaActual > horaCierra) {
-        const responsePayload = {
-          estado_operativo: "cerrado",
-          horario_apertura: horaApertura,
-          horario_cierre: horaCierra,
-          mensaje_para_cliente: `En este momento nos encontramos fuera de horario de servicio. Nuestro horario es de ${horaApertura} a ${horaCierra}. Agradecemos tu llamada, ¡hasta pronto!`
-        };
-        return NextResponse.json(toolCallId ? { results: [{ toolCallId, result: responsePayload }] } : responsePayload, { status: 200 });
+        return NextResponse.json({
+          assistant: {
+            firstMessage: `En este momento nos encontramos fuera de horario de servicio. Nuestro horario es de ${horaApertura} a ${horaCierra}. ¡Gracias por llamar!`,
+            endCallAfterSpokenEnabled: true
+          }
+        }, { status: 200, headers: corsHeaders });
       }
     }
 
-    // 3. Si todo está bien, el negocio está abierto y activo
-    const responsePayload = {
-      estado_operativo: "abierto",
-      nombre_negocio: business["Nombre del negocio"],
-      mensaje_para_cliente: "El negocio está abierto y operando con normalidad."
-    };
-
-    return NextResponse.json(toolCallId ? {
-      results: [
-        {
-          toolCallId: toolCallId,
-          result: responsePayload
-        }
-      ]
-    } : responsePayload, { status: 200 });
+    // 3. Si está abierto y activo, Vapi contesta de forma normal
+    return NextResponse.json({
+      assistant: {
+        firstMessage: "¡Hola, buenas! Gracias por llamar a Tacos Luis, ¿en qué le puedo ayudar hoy?"
+      }
+    }, { status: 200, headers: corsHeaders });
 
   } catch (err: any) {
-    console.error("Error en verificar_estado:", err);
-    return NextResponse.json({ error: err.message }, { status: 200 });
+    console.error("Error en inbound-call:", err);
+    return NextResponse.json({ error: err.message }, { status: 200, headers: corsHeaders });
   }
 }
