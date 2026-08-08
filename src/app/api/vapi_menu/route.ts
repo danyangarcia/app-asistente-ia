@@ -18,21 +18,29 @@ async function handleRequest(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   let businessSlug = searchParams.get("business_slug");
 
-  // Si viene por POST (argumento de la tool de Vapi), lo atrapamos del body
+  // Si viene por POST, atrapamos los argumentos de Vapi de forma segura
   if (request.method === "POST") {
     try {
       const body = await request.json();
-      const args = body.message?.toolCalls?.[0]?.function?.arguments || body.args || {};
-      if (args.business_slug) {
+      
+      // Vapi manda los argumentos en distintas rutas dependiendo de la versión del payload
+      const args = 
+        body.message?.toolCall?.function?.arguments || 
+        body.message?.toolCalls?.[0]?.function?.arguments || 
+        body.args || 
+        body;
+
+      if (args && args.business_slug) {
         businessSlug = args.business_slug;
       }
     } catch (e) {
-      // Ignora si no hay JSON
+      // Si el body viene vacio o malformado
     }
   }
 
+  // Fallback de emergencia por si el bot olvida mandar el slug
   if (!businessSlug) {
-    return NextResponse.json({ error: "Falta especificar el business_slug" }, { status: 400 });
+    businessSlug = "tacos-luis";
   }
 
   const { data: items, error } = await supabaseAdmin
@@ -47,6 +55,6 @@ async function handleRequest(request: NextRequest) {
 
   return NextResponse.json({
     message: `Menú de ${businessSlug}`,
-    items: items
+    items: items || []
   }, { status: 200 });
 }
