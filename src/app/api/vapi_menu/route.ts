@@ -23,7 +23,6 @@ async function handleRequest(request: NextRequest) {
     try {
       const body = await request.json();
       
-      // Vapi manda los argumentos en distintas rutas dependiendo de la versión del payload
       const args = 
         body.message?.toolCall?.function?.arguments || 
         body.message?.toolCalls?.[0]?.function?.arguments || 
@@ -38,9 +37,12 @@ async function handleRequest(request: NextRequest) {
     }
   }
 
-  // Fallback de emergencia por si el bot olvida mandar el slug
+  // Validación multiempresa estricta: si no hay slug, regresa error en lugar de inventar uno
   if (!businessSlug) {
-    businessSlug = "tacos-luis";
+    return NextResponse.json({ 
+      error: "Parámetro requerido faltante", 
+      message: "No se especificó el business_slug para identificar la empresa." 
+    }, { status: 400 });
   }
 
   const { data: items, error } = await supabaseAdmin
