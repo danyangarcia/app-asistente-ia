@@ -26,58 +26,57 @@ export async function POST(request: NextRequest) {
     );
 
     const body = await request.json();
-    
-    // Asignamos el slug por defecto o lo extraemos de los metadatos de Vapi
     const businessSlug = body.message?.call?.assistant?.metadata?.business_slug || "tacos-luis";
 
-    // Consultamos la tabla 'businesses'
+    // Mapeo con el nombre exacto de las columnas de tu tabla businesses
     const { data: business, error } = await supabaseAdmin
       .from("businesses")
-      .select('"Nombre del negocio", "Cuenta Activa", "Zona Horaria", hora_apertura, hora_cierra')
+      .select('"Nombre del negocio", "Cuenta Activa", "Zona Horaria", hora_apertura, hora_cierre')
       .eq("enlace del panel", businessSlug)
       .single();
 
     if (error || !business) {
+      console.error("Error al obtener negocio:", error);
       return NextResponse.json({
         assistant: {
-          firstMessage: "Disculpa, no pudimos localizar la información del establecimiento en este momento.",
+          firstMessage: "Disculpa, no pudimos consultar la información del establecimiento.",
           endCallAfterSpokenEnabled: true
         }
       }, { status: 200, headers: corsHeaders });
     }
 
-    // 1. Validar si la cuenta está activa
+    // 1. Validar estado de la cuenta
     if (business["Cuenta Activa"] === false) {
       return NextResponse.json({
         assistant: {
-          firstMessage: "Lo sentimos, este servicio se encuentra temporalmente inactivo. ¡Hasta luego!",
+          firstMessage: "Lo sentimos, este servicio se encuentra inactivo temporalmente. ¡Hasta pronto!",
           endCallAfterSpokenEnabled: true
         }
       }, { status: 200, headers: corsHeaders });
     }
 
-    // 2. Validar el horario en vivo
+    // 2. Validar Horarios
     const timeZone = business["Zona Horaria"] || "America/Hermosillo";
     const horaActual = new Date().toLocaleTimeString("en-GB", {
       timeZone: timeZone,
       hour12: false
-    });
+    }); // Formato HH:mm:ss
 
-    const horaApertura = business.hora_apertura;
-    const horaCierra = business.hora_cierra;
+    const horaApertura = business.hora_apertura; // "07:00:00"
+    const horaCierre = business.hora_cierre;     // "15:00:00"
 
-    if (horaApertura && horaCierra) {
-      if (horaActual < horaApertura || horaActual > horaCierra) {
+    if (horaApertura && horaCierre) {
+      if (horaActual < horaApertura || horaActual > horaCierre) {
         return NextResponse.json({
           assistant: {
-            firstMessage: `En este momento nos encontramos fuera de horario de servicio. Nuestro horario es de ${horaApertura} a ${horaCierra}. ¡Gracias por llamar!`,
+            firstMessage: `En este momento nos encontramos fuera de horario. Nuestro horario de servicio es de ${horaApertura.substring(0, 5)} a ${horaCierre.substring(0, 5)}. ¡Gracias por llamar!`,
             endCallAfterSpokenEnabled: true
           }
         }, { status: 200, headers: corsHeaders });
       }
     }
 
-    // 3. Si está abierto y activo, Vapi contesta de forma normal
+    // 3. Negocio abierto
     return NextResponse.json({
       assistant: {
         firstMessage: "¡Hola, buenas! Gracias por llamar a Tacos Luis, ¿en qué le puedo ayudar hoy?"
@@ -85,7 +84,7 @@ export async function POST(request: NextRequest) {
     }, { status: 200, headers: corsHeaders });
 
   } catch (err: any) {
-    console.error("Error en inbound-call:", err);
+    console.error("Error general en inbound-call:", err);
     return NextResponse.json({ error: err.message }, { status: 200, headers: corsHeaders });
   }
 }
