@@ -1,14 +1,27 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
 
-// Handler GET para pruebas de salud en el navegador y evitar el Error 405
+// Encabezados CORS para asegurar que Vapi y los navegadores no bloqueen la conexión
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+};
+
+// Manejo de peticiones OPTIONS (Preflight)
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 200, headers: corsHeaders });
+}
+
+// Handler GET para pruebas de salud en navegador
 export async function GET() {
   return NextResponse.json(
-    { status: "ok", mensaje: "Endpoint de crear_orden activo y listo para recibir peticiones POST." },
-    { status: 200 }
+    { status: "ok", mensaje: "Endpoint crear_orden activo." },
+    { status: 200, headers: corsHeaders }
   );
 }
 
+// Handler POST principal para Vapi
 export async function POST(request: NextRequest) {
   try {
     const supabaseAdmin = createClient(
@@ -20,6 +33,7 @@ export async function POST(request: NextRequest) {
     let toolCallId = null;
     let args: any = {};
 
+    // Extraer argumentos enviado por Vapi
     if (body.message?.toolCalls && body.message.toolCalls.length > 0) {
       toolCallId = body.message.toolCalls[0].id;
       args = body.message.toolCalls[0].function?.arguments || {};
@@ -43,16 +57,22 @@ export async function POST(request: NextRequest) {
     } = args;
 
     if (!business_slug) {
-      return NextResponse.json({ error: "Falta business_slug" }, { status: 200 });
+      return NextResponse.json(
+        { error: "Falta el parámetro business_slug" },
+        { status: 200, headers: corsHeaders }
+      );
     }
 
-    // 1. Validar confirmación
+    // 1. Validar confirmación explícita
     if (confirmado === false || confirmado === "no") {
       const respNo = { exito: false, mensaje: "Pedido no confirmado por el cliente. No se guardó nada." };
-      return NextResponse.json(toolCallId ? { results: [{ toolCallId, result: respNo }] } : respNo, { status: 200 });
+      return NextResponse.json(
+        toolCallId ? { results: [{ toolCallId, result: respNo }] } : respNo,
+        { status: 200, headers: corsHeaders }
+      );
     }
 
-    // 2. Filtro Anti-Duplicados (2 minutos)
+    // 2. Filtro Anti-Duplicados (Revisa peticiones de los últimos 2 minutos)
     const haceDosMinutos = new Date(Date.now() - 2 * 60 * 1000).toISOString();
 
     const { data: ordenesRecientes } = await supabaseAdmin
@@ -64,10 +84,13 @@ export async function POST(request: NextRequest) {
 
     if (ordenesRecientes && ordenesRecientes.length > 0) {
       const respDup = { exito: true, mensaje: "El pedido ya fue registrado previamente. Se ignoró la llamada duplicada." };
-      return NextResponse.json(toolCallId ? { results: [{ toolCallId, result: respDup }] } : respDup, { status: 200 });
+      return NextResponse.json(
+        toolCallId ? { results: [{ toolCallId, result: respDup }] } : respDup,
+        { status: 200, headers: corsHeaders }
+      );
     }
 
-    // 3. Inserción en Supabase
+    // 3. Inserción en la tabla public.orders
     const { error: insertError } = await supabaseAdmin
       .from("orders")
       .insert([
@@ -87,16 +110,23 @@ export async function POST(request: NextRequest) {
 
     if (insertError) {
       console.error("Error Supabase:", insertError);
-      return NextResponse.json({
-        results: [{ toolCallId, result: { exito: false, mensaje: "Error al guardar en base de datos." } }]
-      }, { status: 200 });
+      return NextResponse.json(
+        toolCallId ? { results: [{ toolCallId, result: { exito: false, mensaje: "Error al guardar en base de datos." } }] } : { exito: false },
+        { status: 200, headers: corsHeaders }
+      );
     }
 
     const respOk = { exito: true, mensaje: "¡Pedido registrado con éxito en la base de datos!" };
-    return NextResponse.json(toolCallId ? { results: [{ toolCallId, result: respOk }] } : respOk, { status: 200 });
+    return NextResponse.json(
+      toolCallId ? { results: [{ toolCallId, result: respOk }] } : respOk,
+      { status: 200, headers: corsHeaders }
+    );
 
   } catch (err: any) {
     console.error("Error general:", err);
-    return NextResponse.json({ error: err.message }, { status: 200 });
+    return NextResponse.json(
+      { error: err.message },
+      { status: 200, headers: corsHeaders }
+    );
   }
 }
