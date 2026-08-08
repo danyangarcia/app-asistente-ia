@@ -17,6 +17,7 @@ async function handleRequest(request: NextRequest) {
   );
 
   let businessSlug: string | null = null;
+  let rawBody: any = null;
 
   // 2. Extraer el parámetro si es GET (Pruebas en navegador)
   if (request.method === "GET") {
@@ -26,16 +27,16 @@ async function handleRequest(request: NextRequest) {
   // 3. Extraer el parámetro de Vapi (POST) de forma INFALIBLE
   else if (request.method === "POST") {
     try {
-      const body = await request.json();
+      rawBody = await request.json();
       
       // Caso A: Viene directo en el body de Vapi
-      if (body.business_slug) {
-        businessSlug = body.business_slug;
+      if (rawBody.business_slug) {
+        businessSlug = rawBody.business_slug;
       }
       
       // Caso B: Viene en el formato estándar de toolCalls (Vapi moderno)
-      if (!businessSlug && body.message?.toolCalls && body.message.toolCalls.length > 0) {
-        let args = body.message.toolCalls[0].function?.arguments;
+      if (!businessSlug && rawBody.message?.toolCalls && rawBody.message.toolCalls.length > 0) {
+        let args = rawBody.message.toolCalls[0].function?.arguments;
         
         // ¡CRÍTICO! OpenAI manda los argumentos como String, hay que parsearlos
         if (typeof args === "string") {
@@ -48,7 +49,7 @@ async function handleRequest(request: NextRequest) {
       
       // Caso C: Viene en formatos antiguos (functionCall o args directos)
       if (!businessSlug) {
-        let altArgs = body.message?.functionCall?.arguments || body.args;
+        let altArgs = rawBody.message?.functionCall?.arguments || rawBody.args;
         if (typeof altArgs === "string") {
           try { altArgs = JSON.parse(altArgs); } catch (e) {}
         }
@@ -62,7 +63,6 @@ async function handleRequest(request: NextRequest) {
   }
 
   // 4. Validación Multiempresa Blindada
-  // Si no hay slug, devolvemos STATUS 200 (para no crashear Vapi) pero con instrucciones para el Bot
   if (!businessSlug) {
     return NextResponse.json({ 
       error: "Falta el identificador del negocio.", 
@@ -77,7 +77,7 @@ async function handleRequest(request: NextRequest) {
     .eq("business_slug", businessSlug)
     .eq("disponible", true);
 
-  // Si falla la base de datos, también devolvemos 200 con el error para que la IA lo lea
+  // Si falla la base de datos, devolvemos 200 con el error para que la IA lo lea
   if (error) {
     return NextResponse.json({ 
       error: "Error al conectar con la base de datos.", 
@@ -85,7 +85,25 @@ async function handleRequest(request: NextRequest) {
     }, { status: 200 });
   }
 
-  // 6. Éxito total: Retornamos los platillos
+  // 6. Éxito total: Retornamos con la estructura de resultados que Vapi exige
+  const toolCallId = rawBody?.message?.toolCalls?.[0]?.id;
+
+  // Si la petición vino por POST desde Vapi pero por alguna razón trae toolCallId
+  if (toolCallId) {
+    return NextResponse.json({
+      results: [
+        {
+          toolCallId: toolCallId,
+          result: {
+            negocio_consultado: businessSlug,
+            items: items || []
+          }
+        }
+      ]
+    }, { status: 200 });
+  }
+
+  // Respuesta estándar por si entra por GET o sin ID de herramienta específico
   return NextResponse.json({
     negocio_consultado: businessSlug,
     items: items || []
