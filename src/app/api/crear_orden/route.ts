@@ -1,6 +1,14 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
 
+// Handler GET para pruebas de salud en el navegador y evitar el Error 405
+export async function GET() {
+  return NextResponse.json(
+    { status: "ok", mensaje: "Endpoint de crear_orden activo y listo para recibir peticiones POST." },
+    { status: 200 }
+  );
+}
+
 export async function POST(request: NextRequest) {
   try {
     const supabaseAdmin = createClient(
@@ -38,14 +46,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Falta business_slug" }, { status: 200 });
     }
 
-    // 1. Si el cliente NO confirmó explícitamente, cancelamos el envío
+    // 1. Validar confirmación
     if (confirmado === false || confirmado === "no") {
       const respNo = { exito: false, mensaje: "Pedido no confirmado por el cliente. No se guardó nada." };
       return NextResponse.json(toolCallId ? { results: [{ toolCallId, result: respNo }] } : respNo, { status: 200 });
     }
 
-    // 2. FILTRO ANTI-DUPLICADOS (Evita los 5 pedidos seguidos de Vapi)
-    // Revisa si se creó una orden para este mismo cliente y teléfono en los últimos 2 minutos
+    // 2. Filtro Anti-Duplicados (2 minutos)
     const haceDosMinutos = new Date(Date.now() - 2 * 60 * 1000).toISOString();
 
     const { data: ordenesRecientes } = await supabaseAdmin
@@ -60,7 +67,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(toolCallId ? { results: [{ toolCallId, result: respDup }] } : respDup, { status: 200 });
     }
 
-    // 3. INSERCIÓN A TU TABLA REAL 'public.orders'
+    // 3. Inserción en Supabase
     const { error: insertError } = await supabaseAdmin
       .from("orders")
       .insert([
