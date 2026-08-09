@@ -11,6 +11,8 @@ export interface Order {
   cliente_nombre: string
   cliente_telefono?: string
   direccion?: string
+  referencia_domicilio?: string
+  metodo_pago?: string
   notas?: string
   tipo: string
   hora: string
@@ -24,7 +26,6 @@ export interface Order {
 export default function BoardPage() {
   const pathname = usePathname()
   
-  // Captura inteligente del slug independiente de las barras diagonales extras
   const segments = pathname.split('/').filter(Boolean)
   const slug = segments.length >= 2 ? segments[1] : 'tacos-luis'
   
@@ -35,7 +36,6 @@ export default function BoardPage() {
   const [cancellingId, setCancellingId] = useState<string | null>(null)
   const [razon, setRazon] = useState('')
   
-  // AMARILLO: Estado para controlar el modal de Vista Completa
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
 
   useEffect(() => {
@@ -123,16 +123,35 @@ export default function BoardPage() {
       case 'domicilio': return { label: '🏠 A Domicilio', bg: '#1e3a8a', color: '#93c5fd' }
       case 'comer_aqui': return { label: '🍽️ Para Comer Ahí', bg: '#065f46', color: '#6ee7b7' }
       case 'reserva': return { label: '📅 Reserva', bg: '#78350f', color: '#fde68a' }
-      default: return { label: '🛍️ Pedido', bg: '#374151', color: '#d1d5db' }
+      default: return { label: '🛍️ Para Llevar', bg: '#374151', color: '#d1d5db' }
     }
   }
 
-  // VERDE: Normalización para mostrar 'Llamada IA' en lugar de 'VAPI CALL'
   const getCanalTexto = (origen: string) => {
     if (!origen) return 'Llamada IA'
     const o = origen.toLowerCase()
     if (o.includes('vapi')) return 'Llamada IA'
     return origen
+  }
+
+  // FUNCIÓN PARA CALCULAR O EXTRAER EL PRECIO DE CADA ITEM
+  const getItemPrice = (prod: any, totalOrder: number, totalItems: number) => {
+    const rawPrice = prod.precio ?? prod.precio_unitario ?? prod.costo ?? prod.subtotal ?? 0
+    const cantidad = prod.cantidad || 1
+
+    if (rawPrice > 0) {
+      return rawPrice * cantidad
+    }
+
+    // Si viene en $0 pero hay un total general, estimamos el valor del item
+    if (totalOrder > 0) {
+      if (totalItems === 1) {
+        return totalOrder
+      }
+      return (totalOrder / totalItems) * cantidad
+    }
+
+    return 0
   }
 
   return (
@@ -173,7 +192,6 @@ export default function BoardPage() {
                         </span>
                       </div>
                       
-                      {/* VERDE: Texto de Canal cambiado a Llamada IA */}
                       <div style={{ fontSize: '0.8rem', color: '#9ca3af', marginTop: '0.25rem' }}>
                         Registrado a las: <strong>{order.hora || 'Recién'}</strong> | Canal: <span style={{ textTransform: 'capitalize', color: '#10b981', fontWeight: 'bold' }}>{getCanalTexto(order.origen)}</span>
                       </div>
@@ -186,12 +204,17 @@ export default function BoardPage() {
 
                   <div style={{ background: '#1f2937', padding: '0.75rem', borderRadius: '0.5rem', fontSize: '0.9rem', marginBottom: '1rem' }}>
                     {Array.isArray(order.items) && order.items.length > 0 ? (
-                      order.items.map((prod: any, idx: number) => (
-                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', color: '#e5e7eb', padding: '0.15rem 0' }}>
-                          <span>{prod.cantidad || 1}x {prod.taco || prod.nombre || 'Producto'} ({prod.tortilla || 'maíz'})</span>
-                          <span style={{ color: '#9ca3af' }}>${(prod.precio || 0) * (prod.cantidad || 1)}</span>
-                        </div>
-                      ))
+                      order.items.map((prod: any, idx: number) => {
+                        const subtotalItem = getItemPrice(prod, order.total || 0, order.items.length)
+                        return (
+                          <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', color: '#e5e7eb', padding: '0.15rem 0' }}>
+                            <span>{prod.cantidad || 1}x {prod.taco || prod.nombre || 'Producto'} ({prod.tortilla || 'maíz'})</span>
+                            <span style={{ color: subtotalItem > 0 ? '#34d399' : '#9ca3af', fontWeight: subtotalItem > 0 ? 'bold' : 'normal' }}>
+                              ${subtotalItem}
+                            </span>
+                          </div>
+                        )
+                      })
                     ) : (
                       <div style={{ color: '#9ca3af', fontStyle: 'italic' }}>Sin productos especificados</div>
                     )}
@@ -217,8 +240,6 @@ export default function BoardPage() {
 
                   {!isCancelled && cancellingId !== order.id && (
                     <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'space-between', alignItems: 'center' }}>
-                      
-                      {/* AMARILLO: Botón para abrir el Modal */}
                       <button 
                         onClick={() => setSelectedOrder(order)}
                         style={{ background: '#374151', color: '#e5e7eb', border: '1px solid #4b5563', padding: '0.4rem 0.8rem', borderRadius: '0.4rem', fontSize: '0.85rem', cursor: 'pointer', fontWeight: '500' }}>
@@ -226,7 +247,6 @@ export default function BoardPage() {
                       </button>
 
                       <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                        {/* ROJO: Botón Completar disponible directamente */}
                         {!isCompleted && (
                           <button onClick={() => updateStatus(order.id, 'completed')}
                             style={{ background: '#059669', color: '#fff', border: 'none', padding: '0.4rem 1rem', borderRadius: '0.4rem', fontSize: '0.85rem', fontWeight: 'bold', cursor: 'pointer' }}>
@@ -259,7 +279,7 @@ export default function BoardPage() {
         </div>
       )}
 
-      {/* MODAL CON COBERTURA A PANTALLA COMPLETA Y BLUR */}
+      {/* MODAL CON DETALLES Y CÁLCULO DE PRECIOS */}
       <AnimatePresence>
         {selectedOrder && (
           <motion.div 
@@ -269,34 +289,34 @@ export default function BoardPage() {
             onClick={() => setSelectedOrder(null)}
             style={{ 
               position: 'fixed', 
-              top: 0, 
-              left: 0, 
+              inset: 0, 
               width: '100vw', 
               height: '100vh', 
-              background: 'rgba(0, 0, 0, 0.4)', 
-              backdropFilter: 'blur(8px)', 
-              WebkitBackdropFilter: 'blur(8px)', 
-              zIndex: 9999, 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center', 
-              padding: '1rem' 
+              background: 'rgba(0, 0, 0, 0.65)', 
+              backdropFilter: 'blur(10px)', 
+              WebkitBackdropFilter: 'blur(10px)', 
+              zIndex: 99999, 
+              display: 'grid', 
+              placeItems: 'center', 
+              padding: '1rem',
+              overflowY: 'auto'
             }}>
             
             <motion.div 
-              initial={{ scale: 0.95, opacity: 0 }} 
-              animate={{ scale: 1, opacity: 1 }} 
-              exit={{ scale: 0.95, opacity: 0 }}
+              initial={{ scale: 0.95, opacity: 0, y: 10 }} 
+              animate={{ scale: 1, opacity: 1, y: 0 }} 
+              exit={{ scale: 0.95, opacity: 0, y: 10 }}
               onClick={(e) => e.stopPropagation()}
               style={{ 
                 background: '#111827', 
                 border: '1px solid #374151', 
                 borderRadius: '1rem', 
                 width: '100%', 
-                maxWidth: '550px', 
+                maxWidth: '580px', 
                 padding: '1.5rem', 
                 color: '#fff', 
-                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)' 
+                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.8)',
+                margin: 'auto'
               }}>
               
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #1f2937', paddingBottom: '0.75rem', marginBottom: '1rem' }}>
@@ -305,7 +325,8 @@ export default function BoardPage() {
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', fontSize: '0.9rem' }}>
-                <div style={{ background: '#1f2937', padding: '0.75rem', borderRadius: '0.5rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                
+                <div style={{ background: '#1f2937', padding: '0.85rem', borderRadius: '0.5rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
                   <div>
                     <span style={{ fontSize: '0.75rem', color: '#9ca3af', display: 'block' }}>Cliente</span>
                     <strong>{selectedOrder.cliente_nombre || 'Cliente General'}</strong>
@@ -316,49 +337,64 @@ export default function BoardPage() {
                   </div>
                   <div>
                     <span style={{ fontSize: '0.75rem', color: '#9ca3af', display: 'block' }}>Tipo de Entrega</span>
-                    <strong style={{ textTransform: 'capitalize', color: '#60a5fa' }}>{selectedOrder.tipo || 'Local'}</strong>
+                    <strong style={{ textTransform: 'capitalize', color: '#60a5fa' }}>{selectedOrder.tipo || 'Para Llevar'}</strong>
                   </div>
                   <div>
-                    <span style={{ fontSize: '0.75rem', color: '#9ca3af', display: 'block' }}>Hora / Registro</span>
+                    <span style={{ fontSize: '0.75rem', color: '#9ca3af', display: 'block' }}>Hora de Registro</span>
                     <strong>{selectedOrder.hora || 'Recién'}</strong>
                   </div>
                 </div>
 
-                {selectedOrder.direccion && (
-                  <div style={{ background: '#1f2937', padding: '0.75rem', borderRadius: '0.5rem' }}>
-                    <span style={{ fontSize: '0.75rem', color: '#9ca3af', display: 'block' }}>Dirección de Envío</span>
-                    <span>{selectedOrder.direccion}</span>
+                <div style={{ background: '#1f2937', padding: '0.85rem', borderRadius: '0.5rem' }}>
+                  <span style={{ fontSize: '0.75rem', color: '#60a5fa', fontWeight: 'bold', display: 'block', marginBottom: '0.25rem' }}>📍 DIRECCIÓN DE ENVÍO</span>
+                  <span style={{ fontSize: '0.95rem', color: '#e5e7eb', fontWeight: '500' }}>
+                    {selectedOrder.direccion || 'No aplica / Recoge en sucursal'}
+                  </span>
+                </div>
+
+                <div style={{ background: '#1f2937', padding: '0.85rem', borderRadius: '0.5rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                  <div>
+                    <span style={{ fontSize: '0.75rem', color: '#9ca3af', display: 'block' }}>Referencias del Domicilio</span>
+                    <span style={{ color: '#d1d5db' }}>{selectedOrder.referencia_domicilio || selectedOrder.notas || 'Sin referencias'}</span>
                   </div>
-                )}
+                  <div>
+                    <span style={{ fontSize: '0.75rem', color: '#9ca3af', display: 'block' }}>Método de Pago</span>
+                    <span style={{ color: '#34d399', fontWeight: 'bold' }}>{selectedOrder.metodo_pago || 'Efectivo'}</span>
+                  </div>
+                </div>
 
                 {selectedOrder.notas && (
-                  <div style={{ background: '#1f2937', padding: '0.75rem', borderRadius: '0.5rem' }}>
-                    <span style={{ fontSize: '0.75rem', color: '#9ca3af', display: 'block' }}>Notas Adicionales de la IA</span>
-                    <span>{selectedOrder.notas}</span>
+                  <div style={{ background: '#1f2937', padding: '0.85rem', borderRadius: '0.5rem' }}>
+                    <span style={{ fontSize: '0.75rem', color: '#f59e0b', fontWeight: 'bold', display: 'block', marginBottom: '0.25rem' }}>📝 NOTAS Y OBSERVACIONES DE LA IA</span>
+                    <span style={{ color: '#d1d5db' }}>{selectedOrder.notas}</span>
                   </div>
                 )}
 
-                <div style={{ background: '#1f2937', padding: '0.75rem', borderRadius: '0.5rem' }}>
-                  <span style={{ fontSize: '0.75rem', color: '#9ca3af', display: 'block', marginBottom: '0.5rem' }}>Desglose de Productos</span>
+                <div style={{ background: '#1f2937', padding: '0.85rem', borderRadius: '0.5rem' }}>
+                  <span style={{ fontSize: '0.75rem', color: '#9ca3af', display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>DESGLOSE DE PRODUCTOS</span>
                   {Array.isArray(selectedOrder.items) && selectedOrder.items.length > 0 ? (
-                    selectedOrder.items.map((prod: any, idx: number) => (
-                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.25rem 0', borderBottom: '1px solid #374151' }}>
-                        <span>{prod.cantidad || 1}x {prod.taco || prod.nombre || 'Producto'} ({prod.tortilla || 'maíz'})</span>
-                        <span style={{ fontWeight: 'bold' }}>${(prod.precio || 0) * (prod.cantidad || 1)}</span>
-                      </div>
-                    ))
+                    selectedOrder.items.map((prod: any, idx: number) => {
+                      const subtotalItem = getItemPrice(prod, selectedOrder.total || 0, selectedOrder.items.length)
+                      return (
+                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.35rem 0', borderBottom: '1px solid #374151' }}>
+                          <span>{prod.cantidad || 1}x {prod.taco || prod.nombre || 'Producto'} ({prod.tortilla || 'maíz'})</span>
+                          <span style={{ fontWeight: 'bold', color: subtotalItem > 0 ? '#34d399' : '#fff' }}>${subtotalItem}</span>
+                        </div>
+                      )
+                    })
                   ) : (
                     <span style={{ color: '#9ca3af', fontStyle: 'italic' }}>Sin items detallados</span>
                   )}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.75rem', paddingTop: '0.5rem', fontWeight: 'bold', fontSize: '1rem' }}>
-                    <span>Total:</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.75rem', paddingTop: '0.5rem', fontWeight: 'bold', fontSize: '1.05rem' }}>
+                    <span>Total General:</span>
                     <span style={{ color: '#34d399' }}>${selectedOrder.total || 0}</span>
                   </div>
                 </div>
+
               </div>
 
               <div style={{ marginTop: '1.25rem', textAlign: 'right' }}>
-                <button onClick={() => setSelectedOrder(null)} style={{ background: '#374151', color: '#fff', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.4rem', cursor: 'pointer', fontWeight: 'bold' }}>
+                <button onClick={() => setSelectedOrder(null)} style={{ background: '#374151', color: '#fff', border: 'none', padding: '0.5rem 1.25rem', borderRadius: '0.4rem', cursor: 'pointer', fontWeight: 'bold' }}>
                   Cerrar
                 </button>
               </div>
