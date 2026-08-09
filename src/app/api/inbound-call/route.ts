@@ -32,11 +32,9 @@ export async function POST(request: NextRequest) {
     let body: any = {};
     try {
       body = await request.json();
-    } catch (e) {
-      // Petición sin cuerpo JSON estructurado
-    }
+    } catch (e) {}
 
-    // 1. Detección si la petición viene como llamada a herramienta (Tool Call)
+    // Detección si viene de Tool Call
     if (body.message?.toolCalls && body.message.toolCalls.length > 0) {
       toolCallId = body.message.toolCalls[0].id;
       let args = body.message.toolCalls[0].function?.arguments;
@@ -48,15 +46,16 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 2. Extracción de respaldo del identificador de la empresa
+    // Si no viene en la URL ni en la Tool, se extrae del metadata o se usa el slug por defecto
     if (!businessSlug) {
       businessSlug =
         body.message?.call?.assistant?.metadata?.business_slug ||
+        body.message?.call?.customer?.metadata?.business_slug ||
         body.business_slug ||
-        "tacos-luis";
+        "tacos-luis"; // Slug de respaldo si entra llamada directa
     }
 
-    // 3. Consulta a la tabla businesses usando los nombres exactos de columnas
+    // Consultar Supabase
     const { data: business, error } = await supabaseAdmin
       .from("businesses")
       .select('"Nombre del negocio", "Cuenta Activa", "Zona Horaria", hora_apertura, hora_cierre')
@@ -67,26 +66,26 @@ export async function POST(request: NextRequest) {
       console.error("Error al obtener negocio de Supabase:", error);
       return responder(toolCallId, {
         estado_operativo: "error",
-        mensaje_para_cliente: "Disculpa, no pudimos localizar la información del establecimiento en este momento."
+        mensaje_para_cliente: "Disculpa, no pudimos localizar la información del establecimiento."
       });
     }
 
-    const nombreNegocio = business["Nombre del negocio"] || "el establecimiento";
+    const nombreNegocio = business["Nombre del negocio"] || "el negocio";
 
-    // 4. Validar si la cuenta está activa
+    // 1. Validar cuenta activa
     if (business["Cuenta Activa"] === false) {
       return responder(toolCallId, {
         estado_operativo: "inactivo",
-        mensaje_para_cliente: `Lo sentimos, el servicio para ${nombreNegocio} se encuentra inactivo temporalmente. ¡Hasta pronto!`
+        mensaje_para_cliente: `Lo sentimos, el servicio para ${nombreNegocio} está temporalmente inactivo.`
       });
     }
 
-    // 5. Validar horario en tiempo real según la zona horaria asignada
+    // 2. Validar horario
     const timeZone = business["Zona Horaria"] || "America/Hermosillo";
     const horaActual = new Date().toLocaleTimeString("en-GB", {
       timeZone: timeZone,
       hour12: false
-    }); // Retorna formato HH:mm:ss
+    });
 
     const horaApertura = business.hora_apertura;
     const horaCierre = business.hora_cierre;
@@ -98,24 +97,23 @@ export async function POST(request: NextRequest) {
 
         return responder(toolCallId, {
           estado_operativo: "cerrado",
-          mensaje_para_cliente: `Gracias por llamar a ${nombreNegocio}. En este momento nos encontramos fuera de horario. Nuestro horario de atención es de ${aperturaFormat} a ${cierreFormat}. ¡Gracias por comunicarse!`
+          mensaje_para_cliente: `Gracias por llamar a ${nombreNegocio}. En este momento nos encontramos cerrados. Nuestro horario es de ${aperturaFormat} a ${cierreFormat}. ¡Gracias por comunicarte!`
         });
       }
     }
 
-    // 6. Negocio dentro de horario operativo
+    // 3. Negocio Abierto
     return responder(toolCallId, {
       estado_operativo: "abierto",
       mensaje_para_cliente: `¡Hola, buenas! Gracias por llamar a ${nombreNegocio}, ¿en qué le puedo ayudar hoy?`
     });
 
   } catch (err: any) {
-    console.error("Error general en servidor:", err);
+    console.error("Error en servidor:", err);
     return NextResponse.json({ error: err.message }, { status: 200, headers: corsHeaders });
   }
 }
 
-// Función auxiliar para responder a Vapi según el tipo de solicitud
 function responder(toolCallId: string | null, payload: { estado_operativo: string; mensaje_para_cliente: string }) {
   if (toolCallId) {
     return NextResponse.json({
@@ -123,8 +121,10 @@ function responder(toolCallId: string | null, payload: { estado_operativo: strin
     }, { status: 200, headers: corsHeaders });
   }
 
+  // Respuesta al webhook de Vapi para llamadas entrantes
   return NextResponse.json({
     assistant: {
+      firstMessageMode: "assistant-speaks-first",
       firstMessage: payload.mensaje_para_cliente,
       ...(payload.estado_operativo !== "abierto" && { endCallAfterSpokenEnabled: true })
     }
