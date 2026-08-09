@@ -134,7 +134,6 @@ export default function BoardPage() {
     return origen
   }
 
-  // FUNCIÓN PARA CALCULAR O EXTRAER EL PRECIO DE CADA ITEM
   const getItemPrice = (prod: any, totalOrder: number, totalItems: number) => {
     const rawPrice = prod.precio ?? prod.precio_unitario ?? prod.costo ?? prod.subtotal ?? 0
     const cantidad = prod.cantidad || 1
@@ -143,7 +142,6 @@ export default function BoardPage() {
       return rawPrice * cantidad
     }
 
-    // Si viene en $0 pero hay un total general, estimamos el valor del item
     if (totalOrder > 0) {
       if (totalItems === 1) {
         return totalOrder
@@ -279,7 +277,7 @@ export default function BoardPage() {
         </div>
       )}
 
-      {/* MODAL CON DETALLES Y CÁLCULO DE PRECIOS */}
+      {/* MODAL CON COBERTURA COMPLETA Y CENTRADO EXACTO */}
       <AnimatePresence>
         {selectedOrder && (
           <motion.div 
@@ -289,42 +287,46 @@ export default function BoardPage() {
             onClick={() => setSelectedOrder(null)}
             style={{ 
               position: 'fixed', 
-              inset: 0, 
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
               width: '100vw', 
               height: '100vh', 
-              background: 'rgba(0, 0, 0, 0.65)', 
-              backdropFilter: 'blur(10px)', 
-              WebkitBackdropFilter: 'blur(10px)', 
-              zIndex: 99999, 
-              display: 'grid', 
-              placeItems: 'center', 
-              padding: '1rem',
-              overflowY: 'auto'
+              background: 'rgba(0, 0, 0, 0.75)', 
+              backdropFilter: 'blur(12px)', 
+              WebkitBackdropFilter: 'blur(12px)', 
+              zIndex: 999999, 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              padding: '1rem'
             }}>
             
             <motion.div 
-              initial={{ scale: 0.95, opacity: 0, y: 10 }} 
-              animate={{ scale: 1, opacity: 1, y: 0 }} 
-              exit={{ scale: 0.95, opacity: 0, y: 10 }}
+              initial={{ scale: 0.92, opacity: 0 }} 
+              animate={{ scale: 1, opacity: 1 }} 
+              exit={{ scale: 0.92, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
               style={{ 
                 background: '#111827', 
                 border: '1px solid #374151', 
                 borderRadius: '1rem', 
                 width: '100%', 
-                maxWidth: '580px', 
+                maxWidth: '560px', 
+                maxHeight: '90vh',
+                overflowY: 'auto',
                 padding: '1.5rem', 
                 color: '#fff', 
-                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.8)',
-                margin: 'auto'
+                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.9)'
               }}>
               
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #1f2937', paddingBottom: '0.75rem', marginBottom: '1rem' }}>
-                <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 'bold' }}>Información Completa del Pedido</h3>
+                <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 'bold' }}>Información Completa del Pedido</h3>
                 <button onClick={() => setSelectedOrder(null)} style={{ background: 'transparent', border: 'none', color: '#9ca3af', fontSize: '1.2rem', cursor: 'pointer', fontWeight: 'bold' }}>✕</button>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', fontSize: '0.9rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', fontSize: '0.88rem' }}>
                 
                 <div style={{ background: '#1f2937', padding: '0.85rem', borderRadius: '0.5rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
                   <div>
@@ -347,7 +349,7 @@ export default function BoardPage() {
 
                 <div style={{ background: '#1f2937', padding: '0.85rem', borderRadius: '0.5rem' }}>
                   <span style={{ fontSize: '0.75rem', color: '#60a5fa', fontWeight: 'bold', display: 'block', marginBottom: '0.25rem' }}>📍 DIRECCIÓN DE ENVÍO</span>
-                  <span style={{ fontSize: '0.95rem', color: '#e5e7eb', fontWeight: '500' }}>
+                  <span style={{ fontSize: '0.9rem', color: '#e5e7eb', fontWeight: '500' }}>
                     {selectedOrder.direccion || 'No aplica / Recoge en sucursal'}
                   </span>
                 </div>
