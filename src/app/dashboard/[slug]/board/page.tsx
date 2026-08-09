@@ -9,6 +9,9 @@ export interface Order {
   id: string
   business_slug: string
   cliente_nombre: string
+  cliente_telefono?: string
+  direccion?: string
+  notas?: string
   tipo: string
   hora: string
   items: any[]
@@ -31,6 +34,9 @@ export default function BoardPage() {
   const [loading, setLoading] = useState(true)
   const [cancellingId, setCancellingId] = useState<string | null>(null)
   const [razon, setRazon] = useState('')
+  
+  // AMARILLO: Estado para controlar qué pedido se ve en el Modal / Vista Completa
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
 
   useEffect(() => {
     if (!slug) return
@@ -121,6 +127,14 @@ export default function BoardPage() {
     }
   }
 
+  // VERDE: Función para limpiar el texto de la fuente de la llamada
+  const getCanalTexto = (origen: string) => {
+    if (!origen) return 'Llamada IA'
+    const o = origen.toLowerCase()
+    if (o.includes('vapi')) return 'Llamada IA'
+    return origen
+  }
+
   return (
     <div style={{ color: '#fff', maxWidth: '900px', margin: '0 auto', paddingBottom: '3rem' }}>
       <header style={{ marginBottom: '2rem', borderBottom: '1px solid #1f2937', paddingBottom: '1rem' }}>
@@ -158,8 +172,10 @@ export default function BoardPage() {
                           {badge.label}
                         </span>
                       </div>
+                      
+                      {/* VERDE: Remplazado VAPI CALL por Llamada IA */}
                       <div style={{ fontSize: '0.8rem', color: '#9ca3af', marginTop: '0.25rem' }}>
-                        Registrado a las: <strong>{order.hora || 'Recién'}</strong> | Canal: <span style={{ textTransform: 'uppercase', color: '#60a5fa' }}>{order.origen || 'vapi'}</span>
+                        Registrado a las: <strong>{order.hora || 'Recién'}</strong> | Canal: <span style={{ textTransform: 'capitalize', color: '#10b981', fontWeight: 'bold' }}>{getCanalTexto(order.origen)}</span>
                       </div>
                     </div>
 
@@ -200,29 +216,33 @@ export default function BoardPage() {
                   )}
 
                   {!isCancelled && cancellingId !== order.id && (
-                    <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', alignItems: 'center' }}>
-                      {order.estado === 'new' && (
-                        <button onClick={() => updateStatus(order.id, 'in_progress')}
-                          style={{ background: '#2563eb', color: '#fff', border: 'none', padding: '0.4rem 1rem', borderRadius: '0.4rem', fontSize: '0.85rem', fontWeight: 'bold', cursor: 'pointer' }}>
-                          ✔ Confirmar / Tomar
-                        </button>
-                      )}
-
-                      {(order.estado === 'in_progress' || order.estado === 'ready') && (
-                        <button onClick={() => updateStatus(order.id, 'completed')}
-                          style={{ background: '#059669', color: '#fff', border: 'none', padding: '0.4rem 1rem', borderRadius: '0.4rem', fontSize: '0.85rem', fontWeight: 'bold', cursor: 'pointer' }}>
-                          ✔ Completado
-                        </button>
-                      )}
-
-                      {order.estado === 'completed' && (
-                        <span style={{ fontSize: '0.85rem', color: '#34d399', fontWeight: 'bold' }}>✔ Pedido Completado</span>
-                      )}
-
-                      <button onClick={() => { setCancellingId(order.id); setRazon(''); }}
-                        style={{ background: 'transparent', border: '1px solid #dc2626', color: '#f87171', padding: '0.4rem 0.8rem', borderRadius: '0.4rem', fontSize: '0.85rem', cursor: 'pointer' }}>
-                        Cancelar ✕
+                    <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'space-between', alignItems: 'center' }}>
+                      
+                      {/* AMARILLO: Botón de Vista Completa */}
+                      <button 
+                        onClick={() => setSelectedOrder(order)}
+                        style={{ background: '#374151', color: '#e5e7eb', border: '1px solid #4b5563', padding: '0.4rem 0.8rem', borderRadius: '0.4rem', fontSize: '0.85rem', cursor: 'pointer', fontWeight: '500' }}>
+                        🔍 Vista Completa
                       </button>
+
+                      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                        {/* ROJO: Botón de completado visible directamente cuando el pedido está activo */}
+                        {!isCompleted && (
+                          <button onClick={() => updateStatus(order.id, 'completed')}
+                            style={{ background: '#059669', color: '#fff', border: 'none', padding: '0.4rem 1rem', borderRadius: '0.4rem', fontSize: '0.85rem', fontWeight: 'bold', cursor: 'pointer' }}>
+                            ✔ Completar
+                          </button>
+                        )}
+
+                        {isCompleted && (
+                          <span style={{ fontSize: '0.85rem', color: '#34d399', fontWeight: 'bold' }}>✔ Pedido Completado</span>
+                        )}
+
+                        <button onClick={() => { setCancellingId(order.id); setRazon(''); }}
+                          style={{ background: 'transparent', border: '1px solid #dc2626', color: '#f87171', padding: '0.4rem 0.8rem', borderRadius: '0.4rem', fontSize: '0.85rem', cursor: 'pointer' }}>
+                          Cancelar ✕
+                        </button>
+                      </div>
                     </div>
                   )}
 
@@ -238,6 +258,92 @@ export default function BoardPage() {
           )}
         </div>
       )}
+
+      {/* AMARILLO: MODAL / VENTANA EMERGENTE PARA VISTA COMPLETA */}
+      <AnimatePresence>
+        {selectedOrder && (
+          <motion.div 
+            initial={{ opacity: 0 }} 
+            animate={{ opacity: 1 }} 
+            exit={{ opacity: 0 }}
+            onClick={() => setSelectedOrder(null)}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', backdropFilter: 'blur(4px)' }}>
+            
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }} 
+              animate={{ scale: 1, opacity: 1 }} 
+              exit={{ scale: 0.95, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              style={{ background: '#111827', border: '1px solid #374151', borderRadius: '1rem', width: '100%', maxWidth: '550px', padding: '1.5rem', color: '#fff', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)' }}>
+              
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #1f2937', paddingBottom: '0.75rem', marginBottom: '1rem' }}>
+                <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 'bold' }}>Información Completa del Pedido</h3>
+                <button onClick={() => setSelectedOrder(null)} style={{ background: 'transparent', border: 'none', color: '#9ca3af', fontSize: '1.2rem', cursor: 'pointer', fontWeight: 'bold' }}>✕</button>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', fontSize: '0.9rem' }}>
+                <div style={{ background: '#1f2937', padding: '0.75rem', borderRadius: '0.5rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                  <div>
+                    <span style={{ fontSize: '0.75rem', color: '#9ca3af', display: 'block' }}>Cliente</span>
+                    <strong>{selectedOrder.cliente_nombre || 'Cliente General'}</strong>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '0.75rem', color: '#9ca3af', display: 'block' }}>Teléfono</span>
+                    <strong>{selectedOrder.cliente_telefono || 'No especificado'}</strong>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '0.75rem', color: '#9ca3af', display: 'block' }}>Tipo de Entrega</span>
+                    <strong style={{ textTransform: 'capitalize', color: '#60a5fa' }}>{selectedOrder.tipo || 'Local'}</strong>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '0.75rem', color: '#9ca3af', display: 'block' }}>Hora / Registro</span>
+                    <strong>{selectedOrder.hora || 'Recién'}</strong>
+                  </div>
+                </div>
+
+                {selectedOrder.direccion && (
+                  <div style={{ background: '#1f2937', padding: '0.75rem', borderRadius: '0.5rem' }}>
+                    <span style={{ fontSize: '0.75rem', color: '#9ca3af', display: 'block' }}>Dirección de Envío</span>
+                    <span>{selectedOrder.direccion}</span>
+                  </div>
+                )}
+
+                {selectedOrder.notas && (
+                  <div style={{ background: '#1f2937', padding: '0.75rem', borderRadius: '0.5rem' }}>
+                    <span style={{ fontSize: '0.75rem', color: '#9ca3af', display: 'block' }}>Notas Adicionales de la IA</span>
+                    <span>{selectedOrder.notas}</span>
+                  </div>
+                )}
+
+                <div style={{ background: '#1f2937', padding: '0.75rem', borderRadius: '0.5rem' }}>
+                  <span style={{ fontSize: '0.75rem', color: '#9ca3af', display: 'block', marginBottom: '0.5rem' }}>Desglose de Productos</span>
+                  {Array.isArray(selectedOrder.items) && selectedOrder.items.length > 0 ? (
+                    selectedOrder.items.map((prod: any, idx: number) => (
+                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.25rem 0', borderBottom: '1px solid #374151' }}>
+                        <span>{prod.cantidad || 1}x {prod.taco || prod.nombre || 'Producto'} ({prod.tortilla || 'maíz'})</span>
+                        <span style={{ fontWeight: 'bold' }}>${(prod.precio || 0) * (prod.cantidad || 1)}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <span style={{ color: '#9ca3af', fontStyle: 'italic' }}>Sin items detallados</span>
+                  )}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.75rem', paddingTop: '0.5rem', fontWeight: 'bold', fontSize: '1rem' }}>
+                    <span>Total:</span>
+                    <span style={{ color: '#34d399' }}>${selectedOrder.total || 0}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ marginTop: '1.25rem', textAlign: 'right' }}>
+                <button onClick={() => setSelectedOrder(null)} style={{ background: '#374151', color: '#fff', border: 'none', padding: '0.5rem 1rem', borderRadius: '0.4rem', cursor: 'pointer', fontWeight: 'bold' }}>
+                  Cerrar
+                </button>
+              </div>
+
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
