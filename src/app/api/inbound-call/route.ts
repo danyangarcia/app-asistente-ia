@@ -13,7 +13,7 @@ export async function OPTIONS() {
 
 export async function GET() {
   return NextResponse.json(
-    { status: "ok", mensaje: "Endpoint inbound-call activo." },
+    { status: "ok", mensaje: "Endpoint activo." },
     { status: 200, headers: corsHeaders }
   );
 }
@@ -25,26 +25,35 @@ export async function POST(request: NextRequest) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    // 1. Intentar obtener el business_slug desde los parámetros URL (?business_slug=tacos-luis)
     const { searchParams } = new URL(request.url);
     let businessSlug = searchParams.get("business_slug");
+    let toolCallId = null;
 
-    // 2. Si no viene en la URL, intentar extraerlo del body que envía Vapi
     let body: any = {};
     try {
       body = await request.json();
-    } catch (e) {
-      // Body vacío o no parseable
+    } catch (e) {}
+
+    // Detectar si la petición viene como Tool Call desde la IA
+    if (body.message?.toolCalls && body.message.toolCalls.length > 0) {
+      toolCallId = body.message.toolCalls[0].id;
+      let args = body.message.toolCalls[0].function?.arguments;
+      if (typeof args === "string") {
+        try { args = JSON.parse(args); } catch (e) {}
+      }
+      if (args && args.business_slug) {
+        businessSlug = args.business_slug;
+      }
     }
 
     if (!businessSlug) {
-      businessSlug = 
-        body.message?.call?.assistant?.metadata?.business_slug || 
-        body.business_slug || 
-        "tacos-luis"; // Fallback por defecto
+      businessSlug =
+        body.message?.call?.assistant?.metadata?.business_slug ||
+        body.business_slug ||
+        "tacos-luis";
     }
 
-    // 3. Consultar la tabla businesses en Supabase
+    // Consultar Supabase
     const { data: business, error } = await supabaseAdmin
       .from("businesses")
       .select('"Nombre del negocio", "Cuenta Activa", "Zona Horaria", hora_apertura, hora_cierre')
@@ -52,60 +61,65 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error || !business) {
-      console.error("Error al buscar negocio en DB:", error);
-      return NextResponse.json({
-        assistant: {
-          firstMessage: "Disculpa, no pudimos verificar la información del establecimiento.",
-          endCallAfterSpokenEnabled: true
-        }
-      }, { status: 200, headers: corsHeaders });
+      const errorMsg = "No se encontró la información del establecimiento.";
+      return responder(toolCallId, { estado: "error", mensaje: errorMsg });
     }
 
-    const nombreNegocio = business["Nombre del negocio"] || "nuestro establecimiento";
+    const nombreNegocio = business["Nombre del negocio"] || "el negocio";
 
-    // 4. Validar si la cuenta está activa
+    // 1. Validar cuenta activa
     if (business["Cuenta Activa"] === false) {
-      return NextResponse.json({
-        assistant: {
-          firstMessage: `Lo sentimos, el servicio para ${nombreNegocio} se encuentra inactivo. ¡Hasta pronto!`,
-          endCallAfterSpokenEnabled: true
-        }
-      }, { status: 200, headers: corsHeaders });
+      return responder(toolCallId, {
+        estado_operativo: "inactivo",
+        mensaje_para_cliente: `Lo sentimos, el servicio de ${nombreNegocio} está temporalmente inactivo.`
+      });
     }
 
-    // 5. Validar Horario de Atención
+    // 2. Validar horario en tiempo real
     const timeZone = business["Zona Horaria"] || "America/Hermosillo";
     const horaActual = new Date().toLocaleTimeString("en-GB", {
       timeZone: timeZone,
       hour12: false
-    }); // Retorna HH:mm:ss
+    }); // Formato HH:mm:ss
 
     const horaApertura = business.hora_apertura;
     const horaCierre = business.hora_cierre;
 
     if (horaApertura && horaCierre) {
       if (horaActual < horaApertura || horaActual > horaCierre) {
-        const aperturaFormat = horaApertura.substring(0, 5);
+        const apertFormat = horaApertura.substring(0, 5);
         const cierreFormat = horaCierre.substring(0, 5);
-
-        return NextResponse.json({
-          assistant: {
-            firstMessage: `Gracias por llamar a ${nombreNegocio}. En este momento nos encontramos fuera de horario. Nuestro horario de servicio es de ${aperturaFormat} a ${cierreFormat}. ¡Gracias por comunicarse!`,
-            endCallAfterSpokenEnabled: true
-          }
-        }, { status: 200, headers: corsHeaders });
+        return responder(toolCallId, {
+          estado_operativo: "cerrado",
+          mensaje_para_cliente: `Gracias por llamar a ${nombreNegocio}. En este momento nos encontramos cerrados. Nuestro horario es de ${apertFormat} a ${cierreFormat}. ¡Gracias por comunicarte!`
+        });
       }
     }
 
-    // 6. Negocio abierto
-    return NextResponse.json({
-      assistant: {
-        firstMessage: `¡Hola, buenas! Gracias por llamar a ${nombreNegocio}, ¿en qué le puedo ayudar hoy?`
-      }
-    }, { status: 200, headers: corsHeaders });
+    // 3. Negocio Abierto
+    return responder(toolCallId, {
+      estado_operativo: "abierto",
+      mensaje_para_cliente: `¡Hola, buenas! Gracias por llamar a ${nombreNegocio}, ¿en qué le puedo ayudar hoy?`
+    });
 
   } catch (err: any) {
-    console.error("Error general en inbound-call:", err);
+    console.error("Error en servidor:", err);
     return NextResponse.json({ error: err.message }, { status: 200, headers: corsHeaders });
   }
+}
+
+// Función auxiliar para responder según sea llamada por Tool o por Servidor
+function responder(toolCallId: string | null, payload: any) {
+  if (toolCallId) {
+    return NextResponse.json({
+      results: [{ toolCallId, result: payload }]
+    }, { status: 200, headers: corsHeaders });
+  }
+
+  return NextResponse.json({
+    assistant: {
+      firstMessage: payload.mensaje_para_cliente,
+      ...(payload.estado_operativo !== "abierto" && { endCallAfterSpokenEnabled: true })
+    }
+  }, { status: 200, headers: corsHeaders });
 }
