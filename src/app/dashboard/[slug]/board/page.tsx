@@ -35,7 +35,7 @@ export default function BoardPage() {
   const [cancellingId, setCancellingId] = useState<string | null>(null)
   const [razon, setRazon] = useState('')
   
-  // AMARILLO: Estado para controlar qué pedido se ve en el Modal / Vista Completa
+  // AMARILLO: Estado para controlar el modal de Vista Completa
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
 
   useEffect(() => {
@@ -127,7 +127,7 @@ export default function BoardPage() {
     }
   }
 
-  // VERDE: Función para limpiar el texto de la fuente de la llamada
+  // VERDE: Normalización para mostrar 'Llamada IA' en lugar de 'VAPI CALL'
   const getCanalTexto = (origen: string) => {
     if (!origen) return 'Llamada IA'
     const o = origen.toLowerCase()
@@ -173,7 +173,7 @@ export default function BoardPage() {
                         </span>
                       </div>
                       
-                      {/* VERDE: Remplazado VAPI CALL por Llamada IA */}
+                      {/* VERDE: Texto de Canal cambiado a Llamada IA */}
                       <div style={{ fontSize: '0.8rem', color: '#9ca3af', marginTop: '0.25rem' }}>
                         Registrado a las: <strong>{order.hora || 'Recién'}</strong> | Canal: <span style={{ textTransform: 'capitalize', color: '#10b981', fontWeight: 'bold' }}>{getCanalTexto(order.origen)}</span>
                       </div>
@@ -218,7 +218,7 @@ export default function BoardPage() {
                   {!isCancelled && cancellingId !== order.id && (
                     <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'space-between', alignItems: 'center' }}>
                       
-                      {/* AMARILLO: Botón de Vista Completa */}
+                      {/* AMARILLO: Botón para abrir el Modal */}
                       <button 
                         onClick={() => setSelectedOrder(order)}
                         style={{ background: '#374151', color: '#e5e7eb', border: '1px solid #4b5563', padding: '0.4rem 0.8rem', borderRadius: '0.4rem', fontSize: '0.85rem', cursor: 'pointer', fontWeight: '500' }}>
@@ -226,7 +226,7 @@ export default function BoardPage() {
                       </button>
 
                       <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                        {/* ROJO: Botón de completado visible directamente cuando el pedido está activo */}
+                        {/* ROJO: Botón Completar disponible directamente */}
                         {!isCompleted && (
                           <button onClick={() => updateStatus(order.id, 'completed')}
                             style={{ background: '#059669', color: '#fff', border: 'none', padding: '0.4rem 1rem', borderRadius: '0.4rem', fontSize: '0.85rem', fontWeight: 'bold', cursor: 'pointer' }}>
@@ -259,7 +259,7 @@ export default function BoardPage() {
         </div>
       )}
 
-      {/* AMARILLO: MODAL / VENTANA EMERGENTE PARA VISTA COMPLETA */}
+      {/* MODAL CON COBERTURA A PANTALLA COMPLETA Y BLUR */}
       <AnimatePresence>
         {selectedOrder && (
           <motion.div 
@@ -267,14 +267,37 @@ export default function BoardPage() {
             animate={{ opacity: 1 }} 
             exit={{ opacity: 0 }}
             onClick={() => setSelectedOrder(null)}
-            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', backdropFilter: 'blur(4px)' }}>
+            style={{ 
+              position: 'fixed', 
+              top: 0, 
+              left: 0, 
+              width: '100vw', 
+              height: '100vh', 
+              background: 'rgba(0, 0, 0, 0.4)', 
+              backdropFilter: 'blur(8px)', 
+              WebkitBackdropFilter: 'blur(8px)', 
+              zIndex: 9999, 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              padding: '1rem' 
+            }}>
             
             <motion.div 
               initial={{ scale: 0.95, opacity: 0 }} 
               animate={{ scale: 1, opacity: 1 }} 
               exit={{ scale: 0.95, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
-              style={{ background: '#111827', border: '1px solid #374151', borderRadius: '1rem', width: '100%', maxWidth: '550px', padding: '1.5rem', color: '#fff', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)' }}>
+              style={{ 
+                background: '#111827', 
+                border: '1px solid #374151', 
+                borderRadius: '1rem', 
+                width: '100%', 
+                maxWidth: '550px', 
+                padding: '1.5rem', 
+                color: '#fff', 
+                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)' 
+              }}>
               
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #1f2937', paddingBottom: '0.75rem', marginBottom: '1rem' }}>
                 <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 'bold' }}>Información Completa del Pedido</h3>
