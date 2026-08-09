@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { createClient } from '@/lib/supabaseClient'
 import { usePathname } from 'next/navigation'
@@ -26,6 +27,12 @@ export default function CatalogPage() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [formData, setFormData] = useState({ nombre: '', categoria: '', precio: '' as number | '' })
+  
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   // 1. Cargar el negocio y sus productos reales desde Supabase
   useEffect(() => {
@@ -228,61 +235,100 @@ export default function CatalogPage() {
         </div>
       </div>
 
-      <AnimatePresence>
-        {isModalOpen && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 50, backdropFilter: 'blur(4px)' }}>
-            
-            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
-              style={{ background: '#1f2937', padding: '2rem', borderRadius: '1rem', width: '100%', maxWidth: '400px', border: '1px solid #374151' }}>
+      {/* PORTAL GLOBAL PARA EL MODAL CON Z-INDEX MÁXIMO */}
+      {mounted && createPortal(
+        <AnimatePresence>
+          {isModalOpen && (
+            <motion.div 
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              exit={{ opacity: 0 }}
+              onClick={() => setIsModalOpen(false)}
+              style={{ 
+                position: 'fixed', 
+                top: 0, 
+                left: 0, 
+                right: 0, 
+                bottom: 0, 
+                width: '100vw', 
+                height: '100vh', 
+                backgroundColor: 'rgba(0, 0, 0, 0.85)', 
+                backdropFilter: 'blur(16px)', 
+                WebkitBackdropFilter: 'blur(16px)', 
+                zIndex: 2147483647, 
+                display: 'flex', 
+                justifyContent: 'center', 
+                alignItems: 'center', 
+                padding: '1rem',
+                boxSizing: 'border-box'
+              }}>
               
-              <h3 style={{ margin: '0 0 1.5rem 0', fontSize: '1.25rem' }}>
-                {editingId ? 'Editar Artículo' : 'Nuevo Artículo'}
-              </h3>
+              <motion.div 
+                initial={{ scale: 0.95, opacity: 0 }} 
+                animate={{ scale: 1, opacity: 1 }} 
+                exit={{ scale: 0.95, opacity: 0 }}
+                onClick={(e) => e.stopPropagation()}
+                style={{ 
+                  background: '#111827', 
+                  padding: '2rem', 
+                  borderRadius: '1rem', 
+                  width: '100%', 
+                  maxWidth: '420px', 
+                  border: '1px solid #374151',
+                  color: '#fff',
+                  boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.95)',
+                  margin: 'auto'
+                }}>
+                
+                <h3 style={{ margin: '0 0 1.5rem 0', fontSize: '1.25rem', fontWeight: 'bold' }}>
+                  {editingId ? 'Editar Artículo' : 'Nuevo Artículo'}
+                </h3>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.85rem', color: '#9ca3af', marginBottom: '0.3rem' }}>Nombre</label>
-                  <input type="text" value={formData.nombre} onChange={e => setFormData({...formData, nombre: e.target.value})}
-                    style={{ width: '100%', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid #374151', background: '#111827', color: '#fff', outline: 'none' }} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.85rem', color: '#9ca3af', marginBottom: '0.3rem' }}>Nombre</label>
+                    <input type="text" value={formData.nombre} onChange={e => setFormData({...formData, nombre: e.target.value})}
+                      style={{ width: '100%', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid #374151', background: '#1f2937', color: '#fff', outline: 'none', boxSizing: 'border-box' }} />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.85rem', color: '#9ca3af', marginBottom: '0.3rem' }}>Categoría</label>
+                    <select value={formData.categoria} onChange={e => setFormData({...formData, categoria: e.target.value})}
+                      style={{ width: '100%', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid #374151', background: '#1f2937', color: '#fff', outline: 'none', boxSizing: 'border-box' }}>
+                      {categoriasPermitidas.map((cat) => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.85rem', color: '#9ca3af', marginBottom: '0.3rem' }}>Precio ($)</label>
+                    <input 
+                      type="number" 
+                      value={formData.precio} 
+                      placeholder="Ej. 150"
+                      onChange={e => setFormData({...formData, precio: e.target.value === '' ? '' : Number(e.target.value)})}
+                      style={{ width: '100%', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid #374151', background: '#1f2937', color: '#fff', outline: 'none', boxSizing: 'border-box' }} 
+                    />
+                  </div>
                 </div>
 
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.85rem', color: '#9ca3af', marginBottom: '0.3rem' }}>Categoría</label>
-                  <select value={formData.categoria} onChange={e => setFormData({...formData, categoria: e.target.value})}
-                    style={{ width: '100%', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid #374151', background: '#111827', color: '#fff', outline: 'none' }}>
-                    {categoriasPermitidas.map((cat) => (
-                      <option key={cat} value={cat}>{cat}</option>
-                    ))}
-                  </select>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+                  <button onClick={() => setIsModalOpen(false)}
+                    style={{ background: 'transparent', color: '#9ca3af', border: '1px solid #374151', padding: '0.6rem 1rem', borderRadius: '0.5rem', cursor: 'pointer' }}>
+                    Cancelar
+                  </button>
+                  <button onClick={handleSave}
+                    style={{ background: '#10b981', color: '#fff', border: 'none', padding: '0.6rem 1.2rem', borderRadius: '0.5rem', cursor: 'pointer', fontWeight: 'bold' }}>
+                    Guardar
+                  </button>
                 </div>
-
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.85rem', color: '#9ca3af', marginBottom: '0.3rem' }}>Precio ($)</label>
-                  <input 
-                    type="number" 
-                    value={formData.precio} 
-                    placeholder="Ej. 150"
-                    onChange={e => setFormData({...formData, precio: e.target.value === '' ? '' : Number(e.target.value)})}
-                    style={{ width: '100%', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid #374151', background: '#111827', color: '#fff', outline: 'none' }} 
-                  />
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
-                <button onClick={() => setIsModalOpen(false)}
-                  style={{ background: 'transparent', color: '#9ca3af', border: '1px solid #374151', padding: '0.6rem 1rem', borderRadius: '0.5rem', cursor: 'pointer' }}>
-                  Cancelar
-                </button>
-                <button onClick={handleSave}
-                  style={{ background: '#10b981', color: '#fff', border: 'none', padding: '0.6rem 1.2rem', borderRadius: '0.5rem', cursor: 'pointer', fontWeight: 'bold' }}>
-                  Guardar
-                </button>
-              </div>
+              </motion.div>
             </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
       
     </div>
   )
