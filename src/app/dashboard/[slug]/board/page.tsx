@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { createClient } from '@/lib/supabaseClient'
 import { usePathname } from 'next/navigation'
@@ -37,6 +38,11 @@ export default function BoardPage() {
   const [razon, setRazon] = useState('')
   
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   useEffect(() => {
     if (!slug) return
@@ -277,134 +283,139 @@ export default function BoardPage() {
         </div>
       )}
 
-      {/* MODAL CON COBERTURA COMPLETA Y CENTRADO EXACTO */}
-      <AnimatePresence>
-        {selectedOrder && (
-          <motion.div 
-            initial={{ opacity: 0 }} 
-            animate={{ opacity: 1 }} 
-            exit={{ opacity: 0 }}
-            onClick={() => setSelectedOrder(null)}
-            style={{ 
-              position: 'fixed', 
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              width: '100vw', 
-              height: '100vh', 
-              background: 'rgba(0, 0, 0, 0.75)', 
-              backdropFilter: 'blur(12px)', 
-              WebkitBackdropFilter: 'blur(12px)', 
-              zIndex: 999999, 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center', 
-              padding: '1rem'
-            }}>
-            
+      {/* PORTAL CON Z-INDEX ABSOLUTO MAXIMO Y CENTRADO COMPLETO */}
+      {mounted && createPortal(
+        <AnimatePresence>
+          {selectedOrder && (
             <motion.div 
-              initial={{ scale: 0.92, opacity: 0 }} 
-              animate={{ scale: 1, opacity: 1 }} 
-              exit={{ scale: 0.92, opacity: 0 }}
-              onClick={(e) => e.stopPropagation()}
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              exit={{ opacity: 0 }}
+              onClick={() => setSelectedOrder(null)}
               style={{ 
-                background: '#111827', 
-                border: '1px solid #374151', 
-                borderRadius: '1rem', 
-                width: '100%', 
-                maxWidth: '560px', 
-                maxHeight: '90vh',
-                overflowY: 'auto',
-                padding: '1.5rem', 
-                color: '#fff', 
-                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.9)'
+                position: 'fixed', 
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                width: '100vw', 
+                height: '100vh', 
+                backgroundColor: 'rgba(0, 0, 0, 0.85)', 
+                backdropFilter: 'blur(16px)', 
+                WebkitBackdropFilter: 'blur(16px)', 
+                zIndex: 2147483647, 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center', 
+                padding: '1rem',
+                boxSizing: 'border-box'
               }}>
               
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #1f2937', paddingBottom: '0.75rem', marginBottom: '1rem' }}>
-                <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 'bold' }}>Información Completa del Pedido</h3>
-                <button onClick={() => setSelectedOrder(null)} style={{ background: 'transparent', border: 'none', color: '#9ca3af', fontSize: '1.2rem', cursor: 'pointer', fontWeight: 'bold' }}>✕</button>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', fontSize: '0.88rem' }}>
+              <motion.div 
+                initial={{ scale: 0.95, opacity: 0 }} 
+                animate={{ scale: 1, opacity: 1 }} 
+                exit={{ scale: 0.95, opacity: 0 }}
+                onClick={(e) => e.stopPropagation()}
+                style={{ 
+                  background: '#111827', 
+                  border: '1px solid #374151', 
+                  borderRadius: '1rem', 
+                  width: '100%', 
+                  maxWidth: '560px', 
+                  maxHeight: '80vh',
+                  overflowY: 'auto',
+                  padding: '1.5rem', 
+                  color: '#fff', 
+                  boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.95)',
+                  margin: 'auto'
+                }}>
                 
-                <div style={{ background: '#1f2937', padding: '0.85rem', borderRadius: '0.5rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                  <div>
-                    <span style={{ fontSize: '0.75rem', color: '#9ca3af', display: 'block' }}>Cliente</span>
-                    <strong>{selectedOrder.cliente_nombre || 'Cliente General'}</strong>
-                  </div>
-                  <div>
-                    <span style={{ fontSize: '0.75rem', color: '#9ca3af', display: 'block' }}>Teléfono</span>
-                    <strong>{selectedOrder.cliente_telefono || 'No especificado'}</strong>
-                  </div>
-                  <div>
-                    <span style={{ fontSize: '0.75rem', color: '#9ca3af', display: 'block' }}>Tipo de Entrega</span>
-                    <strong style={{ textTransform: 'capitalize', color: '#60a5fa' }}>{selectedOrder.tipo || 'Para Llevar'}</strong>
-                  </div>
-                  <div>
-                    <span style={{ fontSize: '0.75rem', color: '#9ca3af', display: 'block' }}>Hora de Registro</span>
-                    <strong>{selectedOrder.hora || 'Recién'}</strong>
-                  </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #1f2937', paddingBottom: '0.75rem', marginBottom: '1rem' }}>
+                  <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 'bold' }}>Información Completa del Pedido</h3>
+                  <button onClick={() => setSelectedOrder(null)} style={{ background: 'transparent', border: 'none', color: '#9ca3af', fontSize: '1.2rem', cursor: 'pointer', fontWeight: 'bold' }}>✕</button>
                 </div>
 
-                <div style={{ background: '#1f2937', padding: '0.85rem', borderRadius: '0.5rem' }}>
-                  <span style={{ fontSize: '0.75rem', color: '#60a5fa', fontWeight: 'bold', display: 'block', marginBottom: '0.25rem' }}>📍 DIRECCIÓN DE ENVÍO</span>
-                  <span style={{ fontSize: '0.9rem', color: '#e5e7eb', fontWeight: '500' }}>
-                    {selectedOrder.direccion || 'No aplica / Recoge en sucursal'}
-                  </span>
-                </div>
-
-                <div style={{ background: '#1f2937', padding: '0.85rem', borderRadius: '0.5rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                  <div>
-                    <span style={{ fontSize: '0.75rem', color: '#9ca3af', display: 'block' }}>Referencias del Domicilio</span>
-                    <span style={{ color: '#d1d5db' }}>{selectedOrder.referencia_domicilio || selectedOrder.notas || 'Sin referencias'}</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', fontSize: '0.88rem' }}>
+                  
+                  <div style={{ background: '#1f2937', padding: '0.85rem', borderRadius: '0.5rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                    <div>
+                      <span style={{ fontSize: '0.75rem', color: '#9ca3af', display: 'block' }}>Cliente</span>
+                      <strong>{selectedOrder.cliente_nombre || 'Cliente General'}</strong>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: '0.75rem', color: '#9ca3af', display: 'block' }}>Teléfono</span>
+                      <strong>{selectedOrder.cliente_telefono || 'No especificado'}</strong>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: '0.75rem', color: '#9ca3af', display: 'block' }}>Tipo de Entrega</span>
+                      <strong style={{ textTransform: 'capitalize', color: '#60a5fa' }}>{selectedOrder.tipo || 'Para Llevar'}</strong>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: '0.75rem', color: '#9ca3af', display: 'block' }}>Hora de Registro</span>
+                      <strong>{selectedOrder.hora || 'Recién'}</strong>
+                    </div>
                   </div>
-                  <div>
-                    <span style={{ fontSize: '0.75rem', color: '#9ca3af', display: 'block' }}>Método de Pago</span>
-                    <span style={{ color: '#34d399', fontWeight: 'bold' }}>{selectedOrder.metodo_pago || 'Efectivo'}</span>
-                  </div>
-                </div>
 
-                {selectedOrder.notas && (
                   <div style={{ background: '#1f2937', padding: '0.85rem', borderRadius: '0.5rem' }}>
-                    <span style={{ fontSize: '0.75rem', color: '#f59e0b', fontWeight: 'bold', display: 'block', marginBottom: '0.25rem' }}>📝 NOTAS Y OBSERVACIONES DE LA IA</span>
-                    <span style={{ color: '#d1d5db' }}>{selectedOrder.notas}</span>
+                    <span style={{ fontSize: '0.75rem', color: '#60a5fa', fontWeight: 'bold', display: 'block', marginBottom: '0.25rem' }}>📍 DIRECCIÓN DE ENVÍO</span>
+                    <span style={{ fontSize: '0.9rem', color: '#e5e7eb', fontWeight: '500' }}>
+                      {selectedOrder.direccion || 'No aplica / Recoge en sucursal'}
+                    </span>
                   </div>
-                )}
 
-                <div style={{ background: '#1f2937', padding: '0.85rem', borderRadius: '0.5rem' }}>
-                  <span style={{ fontSize: '0.75rem', color: '#9ca3af', display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>DESGLOSE DE PRODUCTOS</span>
-                  {Array.isArray(selectedOrder.items) && selectedOrder.items.length > 0 ? (
-                    selectedOrder.items.map((prod: any, idx: number) => {
-                      const subtotalItem = getItemPrice(prod, selectedOrder.total || 0, selectedOrder.items.length)
-                      return (
-                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.35rem 0', borderBottom: '1px solid #374151' }}>
-                          <span>{prod.cantidad || 1}x {prod.taco || prod.nombre || 'Producto'} ({prod.tortilla || 'maíz'})</span>
-                          <span style={{ fontWeight: 'bold', color: subtotalItem > 0 ? '#34d399' : '#fff' }}>${subtotalItem}</span>
-                        </div>
-                      )
-                    })
-                  ) : (
-                    <span style={{ color: '#9ca3af', fontStyle: 'italic' }}>Sin items detallados</span>
-                  )}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.75rem', paddingTop: '0.5rem', fontWeight: 'bold', fontSize: '1.05rem' }}>
-                    <span>Total General:</span>
-                    <span style={{ color: '#34d399' }}>${selectedOrder.total || 0}</span>
+                  <div style={{ background: '#1f2937', padding: '0.85rem', borderRadius: '0.5rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                    <div>
+                      <span style={{ fontSize: '0.75rem', color: '#9ca3af', display: 'block' }}>Referencias del Domicilio</span>
+                      <span style={{ color: '#d1d5db' }}>{selectedOrder.referencia_domicilio || selectedOrder.notas || 'Sin referencias'}</span>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: '0.75rem', color: '#9ca3af', display: 'block' }}>Método de Pago</span>
+                      <span style={{ color: '#34d399', fontWeight: 'bold' }}>{selectedOrder.metodo_pago || 'Efectivo'}</span>
+                    </div>
                   </div>
+
+                  {selectedOrder.notas && (
+                    <div style={{ background: '#1f2937', padding: '0.85rem', borderRadius: '0.5rem' }}>
+                      <span style={{ fontSize: '0.75rem', color: '#f59e0b', fontWeight: 'bold', display: 'block', marginBottom: '0.25rem' }}>📝 NOTAS Y OBSERVACIONES DE LA IA</span>
+                      <span style={{ color: '#d1d5db' }}>{selectedOrder.notas}</span>
+                    </div>
+                  )}
+
+                  <div style={{ background: '#1f2937', padding: '0.85rem', borderRadius: '0.5rem' }}>
+                    <span style={{ fontSize: '0.75rem', color: '#9ca3af', display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>DESGLOSE DE PRODUCTOS</span>
+                    {Array.isArray(selectedOrder.items) && selectedOrder.items.length > 0 ? (
+                      selectedOrder.items.map((prod: any, idx: number) => {
+                        const subtotalItem = getItemPrice(prod, selectedOrder.total || 0, selectedOrder.items.length)
+                        return (
+                          <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.35rem 0', borderBottom: '1px solid #374151' }}>
+                            <span>{prod.cantidad || 1}x {prod.taco || prod.nombre || 'Producto'} ({prod.tortilla || 'maíz'})</span>
+                            <span style={{ fontWeight: 'bold', color: subtotalItem > 0 ? '#34d399' : '#fff' }}>${subtotalItem}</span>
+                          </div>
+                        )
+                      })
+                    ) : (
+                      <span style={{ color: '#9ca3af', fontStyle: 'italic' }}>Sin items detallados</span>
+                    )}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.75rem', paddingTop: '0.5rem', fontWeight: 'bold', fontSize: '1.05rem' }}>
+                      <span>Total General:</span>
+                      <span style={{ color: '#34d399' }}>${selectedOrder.total || 0}</span>
+                    </div>
+                  </div>
+
                 </div>
 
-              </div>
+                <div style={{ marginTop: '1.25rem', textAlign: 'right' }}>
+                  <button onClick={() => setSelectedOrder(null)} style={{ background: '#374151', color: '#fff', border: 'none', padding: '0.5rem 1.25rem', borderRadius: '0.4rem', cursor: 'pointer', fontWeight: 'bold' }}>
+                    Cerrar
+                  </button>
+                </div>
 
-              <div style={{ marginTop: '1.25rem', textAlign: 'right' }}>
-                <button onClick={() => setSelectedOrder(null)} style={{ background: '#374151', color: '#fff', border: 'none', padding: '0.5rem 1.25rem', borderRadius: '0.4rem', cursor: 'pointer', fontWeight: 'bold' }}>
-                  Cerrar
-                </button>
-              </div>
-
+              </motion.div>
             </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
     </div>
   )
 }
