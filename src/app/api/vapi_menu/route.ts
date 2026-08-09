@@ -24,21 +24,20 @@ async function handleRequest(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     businessSlug = searchParams.get("business_slug");
   } 
-  // 3. Extraer el parámetro de Vapi (POST) de forma INFALIBLE
+  // 3. Extraer el parámetro de Vapi (POST)
   else if (request.method === "POST") {
     try {
       rawBody = await request.json();
       
-      // Caso A: Viene directo en el body de Vapi
+      // Caso A: Viene directo en el body
       if (rawBody.business_slug) {
         businessSlug = rawBody.business_slug;
       }
       
-      // Caso B: Viene en el formato estándar de toolCalls (Vapi moderno)
+      // Caso B: Viene en el formato estándar de toolCalls (Vapi)
       if (!businessSlug && rawBody.message?.toolCalls && rawBody.message.toolCalls.length > 0) {
         let args = rawBody.message.toolCalls[0].function?.arguments;
         
-        // ¡CRÍTICO! OpenAI manda los argumentos como String, hay que parsearlos
         if (typeof args === "string") {
           try { args = JSON.parse(args); } catch (e) {} 
         }
@@ -47,7 +46,7 @@ async function handleRequest(request: NextRequest) {
         }
       }
       
-      // Caso C: Viene en formatos antiguos (functionCall o args directos)
+      // Caso C: Viene en formatos alternativos
       if (!businessSlug) {
         let altArgs = rawBody.message?.functionCall?.arguments || rawBody.args;
         if (typeof altArgs === "string") {
@@ -62,7 +61,7 @@ async function handleRequest(request: NextRequest) {
     }
   }
 
-  // 4. Validación Multiempresa Blindada
+  // 4. Validación Multiempresa
   if (!businessSlug) {
     return NextResponse.json({ 
       error: "Falta el identificador del negocio.", 
@@ -70,14 +69,50 @@ async function handleRequest(request: NextRequest) {
     }, { status: 200 }); 
   }
 
-  // 5. Consulta a la base de datos de Supabase
+  // 5. NUEVO: Verificar horario de atención antes de entregar el menú
+  const { data: business } = await supabaseAdmin
+    .from("businesses")
+    .select('"Nombre del negocio", "Cuenta Activa", "Zona Horaria", hora_apertura, hora_cierre')
+    .eq("enlace del panel", businessSlug)
+    .single();
+
+  const toolCallId = rawBody?.message?.toolCalls?.[0]?.id;
+
+  if (business) {
+    // Validar si la cuenta está inactiva
+    if (business["Cuenta Activa"] === false) {
+      const payload = {
+        negocio_cerrado: true,
+        mensaje: `Lo sentimos, el servicio para ${business["Nombre del negocio"]} se encuentra inactivo por el momento.`
+      };
+      return responder(toolCallId, businessSlug, payload);
+    }
+
+    // Validar horario según zona horaria
+    const timeZone = business["Zona Horaria"] || "America/Hermosillo";
+    const horaActual = new Date().toLocaleTimeString("en-GB", { timeZone, hour12: false });
+    
+    if (business.hora_apertura && business.hora_cierre) {
+      if (horaActual < business.hora_apertura || horaActual > business.hora_cierre) {
+        const aperturaFormat = business.hora_apertura.substring(0, 5);
+        const cierreFormat = business.hora_cierre.substring(0, 5);
+
+        const payload = {
+          negocio_cerrado: true,
+          mensaje: `Disculpa, en este momento nos encontramos cerrados en ${business["Nombre del negocio"]}. Nuestro horario de atención es de ${aperturaFormat} a ${cierreFormat}.`
+        };
+        return responder(toolCallId, businessSlug, payload);
+      }
+    }
+  }
+
+  // 6. Consulta de items a la base de datos de Supabase (Negocio Abierto)
   const { data: items, error } = await supabaseAdmin
     .from("catalog_items")
     .select("nombre, categoria, precio")
     .eq("business_slug", businessSlug)
     .eq("disponible", true);
 
-  // Si falla la base de datos, devolvemos 200 con el error para que la IA lo lea
   if (error) {
     return NextResponse.json({ 
       error: "Error al conectar con la base de datos.", 
@@ -85,10 +120,17 @@ async function handleRequest(request: NextRequest) {
     }, { status: 200 });
   }
 
-  // 6. Éxito total: Retornamos con la estructura de resultados que Vapi exige
-  const toolCallId = rawBody?.message?.toolCalls?.[0]?.id;
+  // 7. Éxito: Retornamos los platillos del catálogo
+  const payloadExito = {
+    negocio_cerrado: false,
+    items: items || []
+  };
 
-  // Si la petición vino por POST desde Vapi pero por alguna razón trae toolCallId
+  return responder(toolCallId, businessSlug, payloadExito);
+}
+
+// Función auxiliar para responder a Vapi o peticiones estándar
+function responder(toolCallId: string | undefined, businessSlug: string, payload: any) {
   if (toolCallId) {
     return NextResponse.json({
       results: [
@@ -96,16 +138,15 @@ async function handleRequest(request: NextRequest) {
           toolCallId: toolCallId,
           result: {
             negocio_consultado: businessSlug,
-            items: items || []
+            ...payload
           }
         }
       ]
     }, { status: 200 });
   }
 
-  // Respuesta estándar por si entra por GET o sin ID de herramienta específico
   return NextResponse.json({
     negocio_consultado: businessSlug,
-    items: items || []
+    ...payload
   }, { status: 200 });
 }
