@@ -13,7 +13,7 @@ export async function OPTIONS() {
 
 export async function GET() {
   return NextResponse.json(
-    { status: "ok", mensaje: "Endpoint inbound-call dinámico activo." },
+    { status: "ok", mensaje: "Endpoint inbound-call activo." },
     { status: 200, headers: corsHeaders }
   );
 }
@@ -25,15 +25,26 @@ export async function POST(request: NextRequest) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    const body = await request.json();
-    
-    // Extrae el business_slug enviado por Vapi en los metadatos o en el cuerpo
-    const businessSlug = 
-      body.message?.call?.assistant?.metadata?.business_slug || 
-      body.business_slug || 
-      "tacos-luis";
+    // 1. Intentar obtener el business_slug desde los parámetros URL (?business_slug=tacos-luis)
+    const { searchParams } = new URL(request.url);
+    let businessSlug = searchParams.get("business_slug");
 
-    // Consulta dinámica a la tabla 'businesses'
+    // 2. Si no viene en la URL, intentar extraerlo del body que envía Vapi
+    let body: any = {};
+    try {
+      body = await request.json();
+    } catch (e) {
+      // Body vacío o no parseable
+    }
+
+    if (!businessSlug) {
+      businessSlug = 
+        body.message?.call?.assistant?.metadata?.business_slug || 
+        body.business_slug || 
+        "tacos-luis"; // Fallback por defecto
+    }
+
+    // 3. Consultar la tabla businesses en Supabase
     const { data: business, error } = await supabaseAdmin
       .from("businesses")
       .select('"Nombre del negocio", "Cuenta Activa", "Zona Horaria", hora_apertura, hora_cierre')
@@ -41,10 +52,10 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error || !business) {
-      console.error("Error al obtener negocio:", error);
+      console.error("Error al buscar negocio en DB:", error);
       return NextResponse.json({
         assistant: {
-          firstMessage: "Disculpa, no pudimos localizar la información del establecimiento en este momento.",
+          firstMessage: "Disculpa, no pudimos verificar la información del establecimiento.",
           endCallAfterSpokenEnabled: true
         }
       }, { status: 200, headers: corsHeaders });
@@ -52,42 +63,41 @@ export async function POST(request: NextRequest) {
 
     const nombreNegocio = business["Nombre del negocio"] || "nuestro establecimiento";
 
-    // 1. Validar si la cuenta del negocio está activa
+    // 4. Validar si la cuenta está activa
     if (business["Cuenta Activa"] === false) {
       return NextResponse.json({
         assistant: {
-          firstMessage: `Lo sentimos, el servicio para ${nombreNegocio} se encuentra inactivo temporalmente. ¡Hasta luego!`,
+          firstMessage: `Lo sentimos, el servicio para ${nombreNegocio} se encuentra inactivo. ¡Hasta pronto!`,
           endCallAfterSpokenEnabled: true
         }
       }, { status: 200, headers: corsHeaders });
     }
 
-    // 2. Validar horario en vivo según la Zona Horaria asignada a cada empresa
+    // 5. Validar Horario de Atención
     const timeZone = business["Zona Horaria"] || "America/Hermosillo";
     const horaActual = new Date().toLocaleTimeString("en-GB", {
       timeZone: timeZone,
       hour12: false
-    }); // Formato "HH:mm:ss"
+    }); // Retorna HH:mm:ss
 
     const horaApertura = business.hora_apertura;
     const horaCierre = business.hora_cierre;
 
     if (horaApertura && horaCierre) {
       if (horaActual < horaApertura || horaActual > horaCierre) {
-        // Formatear horas a HH:MM dinámicamente
-        const aperturaFormateada = horaApertura.substring(0, 5);
-        const cierreFormateado = horaCierre.substring(0, 5);
+        const aperturaFormat = horaApertura.substring(0, 5);
+        const cierreFormat = horaCierre.substring(0, 5);
 
         return NextResponse.json({
           assistant: {
-            firstMessage: `Gracias por llamar a ${nombreNegocio}. En este momento nos encontramos fuera de horario. Nuestro horario de atención es de ${aperturaFormateada} a ${cierreFormateado}. ¡Gracias por comunicarse!`,
+            firstMessage: `Gracias por llamar a ${nombreNegocio}. En este momento nos encontramos fuera de horario. Nuestro horario de servicio es de ${aperturaFormat} a ${cierreFormat}. ¡Gracias por comunicarse!`,
             endCallAfterSpokenEnabled: true
           }
         }, { status: 200, headers: corsHeaders });
       }
     }
 
-    // 3. Negocio abierto: permite que el asistente atienda normalmente
+    // 6. Negocio abierto
     return NextResponse.json({
       assistant: {
         firstMessage: `¡Hola, buenas! Gracias por llamar a ${nombreNegocio}, ¿en qué le puedo ayudar hoy?`
