@@ -22,6 +22,7 @@ export interface Order {
   estado: 'new' | 'in_progress' | 'ready' | 'completed' | 'cancelled'
   origen: string
   motivo_cancelacion?: string
+  created_at?: string
 }
 
 export default function BoardPage() {
@@ -49,10 +50,15 @@ export default function BoardPage() {
 
     async function fetchOrders() {
       setLoading(true)
+      
+      // Calcular fecha límite de hace 24 horas
+      const hace24Horas = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+
       const { data, error } = await supabase
         .from('orders')
         .select('*')
         .eq('business_slug', slug)
+        .gte('created_at', hace24Horas) // Solo cargar pedidos de las últimas 24 horas
         .order('created_at', { ascending: false })
 
       if (data && !error) {
@@ -75,7 +81,14 @@ export default function BoardPage() {
         },
         (payload) => {
           if (payload.eventType === 'INSERT') {
-            setOrders((prev) => [payload.new as Order, ...prev])
+            const newOrder = payload.new as Order
+            const createdAt = newOrder.created_at ? new Date(newOrder.created_at).getTime() : Date.now()
+            const hace24Horas = Date.now() - 24 * 60 * 60 * 1000
+
+            // Solo agregar si fue creado dentro de las últimas 24 horas
+            if (createdAt >= hace24Horas) {
+              setOrders((prev) => [newOrder, ...prev])
+            }
           } else if (payload.eventType === 'UPDATE') {
             setOrders((prev) =>
               prev.map((o) => (o.id === payload.new.id ? (payload.new as Order) : o))
@@ -91,6 +104,21 @@ export default function BoardPage() {
       supabase.removeChannel(channel)
     }
   }, [slug, supabase])
+
+  // INTERVALO PARA PURGAR PEDIDOS MÁS ANTIGUOS DE 24 HORAS CADA MINUTO
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const hace24Horas = Date.now() - 24 * 60 * 60 * 1000
+      setOrders((prevOrders) =>
+        prevOrders.filter((order) => {
+          const createdAt = order.created_at ? new Date(order.created_at).getTime() : Date.now()
+          return createdAt >= hace24Horas
+        })
+      )
+    }, 60000) // Revisa cada 60 segundos
+
+    return () => clearInterval(interval)
+  }, [])
 
   const updateStatus = async (id: string, nuevoEstado: Order['estado'], extraData = {}) => {
     setOrders((prev) =>
@@ -163,7 +191,7 @@ export default function BoardPage() {
       <header style={{ marginBottom: '2rem', borderBottom: '1px solid #1f2937', paddingBottom: '1rem' }}>
         <h2 style={{ fontSize: '1.4rem', fontWeight: 'bold', margin: 0 }}>Pedidos y Solicitudes en Vivo</h2>
         <p style={{ color: '#9ca3af', fontSize: '0.85rem', margin: '0.2rem 0 0 0' }}>
-          Panel simplificado de la actividad de tu negocio ({slug}).
+          Panel simplificado de la actividad de tu negocio ({slug}). Muestra pedidos de las últimas 24 horas.
         </p>
       </header>
 
@@ -277,7 +305,7 @@ export default function BoardPage() {
 
           {orders.length === 0 && (
             <div style={{ textAlign: 'center', padding: '4rem 0', color: '#4b5563' }}>
-              No hay pedidos registrados todavía.
+              No hay pedidos registrados en las últimas 24 horas.
             </div>
           )}
         </div>
