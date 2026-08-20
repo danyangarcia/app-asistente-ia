@@ -131,7 +131,9 @@ export async function POST(request: NextRequest) {
 
     // 2. CONFIGURACIÓN E INYECCIÓN DE VARIABLES (assistant-request)
     if (eventType === "assistant-request") {
-      const telefonoCliente = message?.call?.customer?.number || "";
+      // Normalizar número telefónico: extraer últimos 10 dígitos numéricos puros
+      const rawPhone = message?.call?.customer?.number || "";
+      const telefonoCliente = rawPhone.replace(/\D/g, "").slice(-10);
 
       // A. Cargar prompt del negocio desde 'businesses'
       const { data: business, error: businessError } = await supabaseAdmin
@@ -144,7 +146,7 @@ export async function POST(request: NextRequest) {
         console.error("Error al buscar negocio en Supabase:", businessError);
       }
 
-      // B. Buscar la última orden en 'orders'
+      // B. Buscar la última orden en 'orders' con coincidencia flexible por teléfono
       let clienteNombre = "nuevo";
       let esPedidoActivo = "false";
       let estadoPedido = "ninguno";
@@ -155,7 +157,7 @@ export async function POST(request: NextRequest) {
         const { data: ultimaOrden } = await supabaseAdmin
           .from("orders")
           .select("id, cliente_nombre, cliente_telefono, items, estado, created_at")
-          .eq("cliente_telefono", telefonoCliente)
+          .ilike("cliente_telefono", `%${telefonoCliente}%`)
           .order("created_at", { ascending: false })
           .limit(1)
           .maybeSingle();
