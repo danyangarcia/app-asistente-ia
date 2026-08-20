@@ -1,5 +1,5 @@
-import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js"; // Asegúrate de importar createClient si lo usas en otro archivo
 
 export async function POST(request: NextRequest) {
   try {
@@ -51,32 +51,75 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      // B. HERRAMIENTA: crear_orden
+      // B. HERRAMIENTA: crear_orden (CON PARCHE DE PRECIOS Y ANTIDUPLICADOS)
       if (functionName === "crear_orden") {
-        const { business_slug, cliente_nombre, cliente_telefono, tipo, direccion, items, total } = args;
+        const callId = message?.call?.id;
 
-        // Sanitización genérica: redondea precios unitarios a 2 decimales para evitar montos extraños
-        const itemsLimpios = Array.isArray(items) 
-          ? items.map((item: any) => ({
-              ...item,
-              precio: item.precio ? Math.round(Number(item.precio) * 100) / 100 : 0
-            }))
-          : [];
+        // 1. Candado Antiduplicados: Si esta llamada ya creó un pedido, lo bloqueamos
+        if (callId) {
+          const { data: ordenDuplicada } = await supabaseAdmin
+            .from("orders")
+            .select("id")
+            .eq("vapi_call_id", callId)
+            .maybeSingle();
 
-        const totalLimpio = total ? Math.round(Number(total) * 100) / 100 : 0;
+          if (ordenDuplicada) {
+            console.log("Intento de orden duplicada bloqueado para la llamada:", callId);
+            return NextResponse.json({
+              results: [{ toolCallId: toolCall.id, result: `El pedido ya fue registrado con éxito anteriormente. ID: ${ordenDuplicada.id}` }]
+            });
+          }
+        }
 
+        const { business_slug, cliente_nombre, cliente_telefono, tipo, direccion, items } = args;
+        const slugNegocio = business_slug || "tacos-luis";
+
+        // 2. Leer precios reales desde catalog_items de Supabase
+        let totalCalculado = 0;
+        const itemsProcesados = [];
+
+        if (Array.isArray(items)) {
+          for (const item of items) {
+            // Buscamos el precio real del producto en la base de datos por nombre
+            const { data: productoBD } = await supabaseAdmin
+              .from("catalog_items")
+              .select("price")
+              .eq("business_slug", slugNegocio)
+              .ilike("nombre", `%${item.nombre || item.name || ""}%`)
+              .maybeSingle();
+
+            // Si encuentra el producto usa su precio, si no, usa 0 para evitar fallos
+            const precioUnitario = productoBD?.price ? Number(productoBD.price) : 0;
+            const cantidad = Number(item.cantidad || item.quantity || 1);
+            const subtotal = precioUnitario * cantidad;
+
+            totalCalculado += subtotal;
+
+            itemsProcesados.push({
+              nombre: item.nombre || item.name || "Taco",
+              cantidad: cantidad,
+              precio: precioUnitario,
+              subtotal: subtotal
+            });
+          }
+        }
+
+        const totalLimpio = Math.round(totalCalculado * 100) / 100;
+
+        // 3. Guardar en la base de datos con los precios reales y el vapi_call_id
         const { data: nuevaOrden, error: createError } = await supabaseAdmin
           .from("orders")
           .insert({
-            business_slug: business_slug || "tacos-luis",
+            business_slug: slugNegocio,
             cliente_nombre: cliente_nombre || "Cliente en llamada",
             cliente_telefono: cliente_telefono || message?.call?.customer?.number || "",
             tipo: tipo || "para_llevar",
             direccion: direccion || "",
-            items: itemsLimpios,
+            items: itemsProcesados,
             total: totalLimpio,
             estado: "pending",
-            origen: "Vapi Call"
+            origen: "Vapi Call",
+            vapi_call_id: callId || null // Guardamos el ID de la llamada como candado
           })
           .select("id")
           .single();
@@ -131,11 +174,9 @@ export async function POST(request: NextRequest) {
 
     // 2. CONFIGURACIÓN E INYECCIÓN DE VARIABLES (assistant-request)
     if (eventType === "assistant-request") {
-      // Normalizar número telefónico: extraer últimos 10 dígitos numéricos puros
       const rawPhone = message?.call?.customer?.number || "";
       const telefonoCliente = rawPhone.replace(/\D/g, "").slice(-10);
 
-      // A. Cargar prompt del negocio desde 'businesses'
       const { data: business, error: businessError } = await supabaseAdmin
         .from("businesses")
         .select("prompt_config")
@@ -146,7 +187,6 @@ export async function POST(request: NextRequest) {
         console.error("Error al buscar negocio en Supabase:", businessError);
       }
 
-      // B. Buscar la última orden en 'orders' con coincidencia flexible por teléfono
       let clienteNombre = "nuevo";
       let esPedidoActivo = "false";
       let estadoPedido = "ninguno";
@@ -189,7 +229,6 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // C. Devolver las variables a Vapi
       return NextResponse.json({
         assistant: {
           variableValues: {
