@@ -209,6 +209,28 @@ export async function POST(request: NextRequest) {
 
       // D. HERRAMIENTA: verificar_estado_negocio
       if (functionName === "verificar_estado_negocio") {
+        // Consultamos la columna exactita 'Cuenta Activa' de Supabase
+        const { data: bizStatus } = await supabaseAdmin
+          .from("businesses")
+          .select('"Cuenta Activa"')
+          .eq("enlace del panel", "tacos-luis")
+          .maybeSingle();
+
+        const estaCuentaActiva = bizStatus?.["Cuenta Activa"];
+
+        // Si Cuenta Activa es false / null, avisamos que está cerrado
+        if (estaCuentaActiva === false) {
+          return NextResponse.json({
+            results: [
+              {
+                toolCallId: toolCall.id,
+                result: JSON.stringify({ estado: "cerrado", mensaje: "El negocio se encuentra cerrado por el momento." })
+              }
+            ]
+          });
+        }
+
+        // Si la cuenta está activa (TRUE), responde normal que está abierto
         return NextResponse.json({
           results: [
             {
@@ -225,10 +247,10 @@ export async function POST(request: NextRequest) {
       const rawPhone = message?.call?.customer?.number || "";
       const telefonoCliente = rawPhone.replace(/\D/g, "").slice(-10);
 
-      // Consultamos el prompt y el estado del cierre manual en la tabla businesses
+      // Consultamos prompt_config y 'Cuenta Activa'
       const { data: business, error: businessError } = await supabaseAdmin
         .from("businesses")
-        .select("prompt_config, is_manual_closed")
+        .select('prompt_config, "Cuenta Activa"')
         .eq("enlace del panel", "tacos-luis")
         .single();
 
@@ -278,6 +300,8 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      const cuentaActiva = business?.["Cuenta Activa"];
+
       return NextResponse.json({
         assistant: {
           variableValues: {
@@ -286,8 +310,8 @@ export async function POST(request: NextRequest) {
             estado_pedido: estadoPedido,
             detalles_pedido: detallesPedido,
             id_orden: idOrdenActiva,
-            // Agregamos esta variable para que Vapi sepa si está cerrado manualmente por el botón
-            is_manual_closed: business?.is_manual_closed ? "true" : "false"
+            // Inyectamos el estado real de la cuenta
+            cuenta_activa: cuentaActiva !== false ? "true" : "false"
           },
           ...(business?.prompt_config && {
             model: {
