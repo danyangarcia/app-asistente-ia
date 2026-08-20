@@ -18,19 +18,20 @@ export async function POST(request: NextRequest) {
 
     console.log("Evento recibido de Vapi:", eventType);
 
-    // 1. HERRAMIENTA / FUNCTION CALL (Si el cliente solicita cancelar)
+    // 1. MANEJO DE HERRAMIENTAS / FUNCTION CALLS (tool-calls)
     if (eventType === "tool-calls") {
       const toolCall = message?.toolCalls?.[0] || message?.toolWithToolCallList?.[0]?.toolCall;
-      
-      if (toolCall?.function?.name === "cancelarPedido") {
-        const args = typeof toolCall.function.arguments === "string"
-          ? JSON.parse(toolCall.function.arguments)
-          : toolCall.function.arguments;
+      const functionName = toolCall?.function?.name;
 
+      const args = typeof toolCall?.function?.arguments === "string"
+        ? JSON.parse(toolCall.function.arguments)
+        : toolCall?.function?.arguments || {};
+
+      // A. HERRAMIENTA: cancelarPedido
+      if (functionName === "cancelarPedido") {
         const { id_orden, motivo } = args;
 
         if (id_orden) {
-          // Actualizamos directo en tus columnas reales: 'estado' y 'motivo_cancelacion'
           await supabaseAdmin
             .from("orders")
             .update({
@@ -45,6 +46,83 @@ export async function POST(request: NextRequest) {
             {
               toolCallId: toolCall.id,
               result: "El pedido ha sido marcado como 'cancelled' correctamente."
+            }
+          ]
+        });
+      }
+
+      // B. HERRAMIENTA: crear_orden
+      if (functionName === "crear_orden") {
+        const { business_slug, cliente_nombre, cliente_telefono, tipo, direccion, items, total } = args;
+
+        // Sanitización genérica: redondea precios unitarios a 2 decimales para evitar montos extraños
+        const itemsLimpios = Array.isArray(items) 
+          ? items.map((item: any) => ({
+              ...item,
+              precio: item.precio ? Math.round(Number(item.precio) * 100) / 100 : 0
+            }))
+          : [];
+
+        const totalLimpio = total ? Math.round(Number(total) * 100) / 100 : 0;
+
+        const { data: nuevaOrden, error: createError } = await supabaseAdmin
+          .from("orders")
+          .insert({
+            business_slug: business_slug || "tacos-luis",
+            cliente_nombre: cliente_nombre || "Cliente en llamada",
+            cliente_telefono: cliente_telefono || message?.call?.customer?.number || "",
+            tipo: tipo || "para_llevar",
+            direccion: direccion || "",
+            items: itemsLimpios,
+            total: totalLimpio,
+            estado: "pending",
+            origen: "Vapi Call"
+          })
+          .select("id")
+          .single();
+
+        if (createError) {
+          console.error("Error guardando orden:", createError);
+          return NextResponse.json({
+            results: [{ toolCallId: toolCall.id, result: "Error interno al guardar la orden." }]
+          });
+        }
+
+        return NextResponse.json({
+          results: [
+            {
+              toolCallId: toolCall.id,
+              result: `Orden creada exitosamente con ID: ${nuevaOrden.id}`
+            }
+          ]
+        });
+      }
+
+      // C. HERRAMIENTA: consultar_menu_supbase
+      if (functionName === "consultar_menu_supbase") {
+        const { data: menu } = await supabaseAdmin
+          .from("catalog_items")
+          .select("nombre, categoria, precio")
+          .eq("business_slug", args.business_slug || "tacos-luis")
+          .eq("disponible", true);
+
+        return NextResponse.json({
+          results: [
+            {
+              toolCallId: toolCall.id,
+              result: JSON.stringify(menu || [])
+            }
+          ]
+        });
+      }
+
+      // D. HERRAMIENTA: verificar_estado_negocio
+      if (functionName === "verificar_estado_negocio") {
+        return NextResponse.json({
+          results: [
+            {
+              toolCallId: toolCall.id,
+              result: JSON.stringify({ estado: "abierto", mensaje: "El negocio está operando normalmente." })
             }
           ]
         });
@@ -66,7 +144,7 @@ export async function POST(request: NextRequest) {
         console.error("Error al buscar negocio en Supabase:", businessError);
       }
 
-      // B. Buscar la última orden en 'orders' usando tus columnas exactas
+      // B. Buscar la última orden en 'orders'
       let clienteNombre = "nuevo";
       let esPedidoActivo = "false";
       let estadoPedido = "ninguno";
@@ -83,12 +161,10 @@ export async function POST(request: NextRequest) {
           .maybeSingle();
 
         if (ultimaOrden) {
-          // Extraer nombre real de tu columna 'cliente_nombre'
           if (ultimaOrden.cliente_nombre && ultimaOrden.cliente_nombre !== "Cliente en llamada") {
             clienteNombre = ultimaOrden.cliente_nombre;
           }
 
-          // Verificar si el pedido fue creado en las últimas 2 horas
           const dosHorasAtras = new Date(Date.now() - 2 * 60 * 60 * 1000);
           const fechaOrden = new Date(ultimaOrden.created_at);
 
@@ -102,7 +178,6 @@ export async function POST(request: NextRequest) {
             estadoPedido = ultimaOrden.estado || "pendiente";
             idOrdenActiva = ultimaOrden.id;
 
-            // Extraer nombres de productos desde el JSONB de tu columna 'items'
             if (Array.isArray(ultimaOrden.items)) {
               detallesPedido = ultimaOrden.items.map((i: any) => i.nombre || "producto").join(", ");
             } else if (typeof ultimaOrden.items === "string") {
@@ -112,7 +187,7 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // C. Devolver las variables a Vapi conservando tu prompt_config original
+      // C. Devolver las variables a Vapi
       return NextResponse.json({
         assistant: {
           variableValues: {
