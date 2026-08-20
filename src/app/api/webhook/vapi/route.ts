@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      // B. HERRAMIENTA: crear_orden (ACTUALIZA SI EXISTE ORDEN ACTIVA, CREA SI NO)
+      // B. HERRAMIENTA: crear_orden
       if (functionName === "crear_orden") {
         const callId = message?.call?.id;
         const rawPhone = message?.call?.customer?.number || args.cliente_telefono || "";
@@ -60,12 +60,10 @@ export async function POST(request: NextRequest) {
         const { business_slug, cliente_nombre, tipo, direccion, items } = args;
         const slugNegocio = business_slug || "tacos-luis";
 
-        // Limpiar el nombre para que nunca se guarde literal como "nuevo"
         let nombreLimpio = cliente_nombre && cliente_nombre.toLowerCase() !== "nuevo"
           ? cliente_nombre
           : "Cliente en llamada";
 
-        // 1. Leer precios reales desde catalog_items de Supabase
         let totalCalculado = 0;
         const itemsProcesados = [];
 
@@ -83,7 +81,6 @@ export async function POST(request: NextRequest) {
 
             let precioUnitario = productoBD?.price ? Number(productoBD.price) : 0;
            
-            // Fallback por si la IA pide refresco/soda general
             if (precioUnitario === 0 && (nombreItem.toLowerCase().includes("pepsi") || nombreItem.toLowerCase().includes("soda") || nombreItem.toLowerCase().includes("refresco"))) {
               const { data: prodSoda } = await supabaseAdmin
                 .from("catalog_items")
@@ -109,7 +106,6 @@ export async function POST(request: NextRequest) {
 
         const totalLimpio = Math.round(totalCalculado * 100) / 100;
 
-        // 2. BUSCAR SI EL CLIENTE YA TIENE UNA ORDEN ACTIVA/PENDIENTE
         let ordenExistente = null;
         if (telefonoCliente) {
           const { data: encontrada } = await supabaseAdmin
@@ -129,7 +125,6 @@ export async function POST(request: NextRequest) {
         let idOrdenFinal;
 
         if (ordenExistente) {
-          // SI YA TIENE ORDEN ACTIVA: Actualizamos sumando los nuevos items y recalculando el total
           const itemsActualizados = [...(ordenExistente.items || []), ...itemsProcesados];
           const nuevoTotalGeneral = Number(ordenExistente.total || 0) + totalLimpio;
 
@@ -148,9 +143,7 @@ export async function POST(request: NextRequest) {
             .eq("id", ordenExistente.id);
 
           idOrdenFinal = ordenExistente.id;
-          console.log("Orden activa actualizada con éxito:", idOrdenFinal);
         } else {
-          // SI NO TIENE ORDEN ACTIVA: Creamos una nueva
           const { data: nuevaOrden, error: createError } = await supabaseAdmin
             .from("orders")
             .insert({
@@ -169,14 +162,12 @@ export async function POST(request: NextRequest) {
             .single();
 
           if (createError) {
-            console.error("Error guardando orden:", createError);
             return NextResponse.json({
               results: [{ toolCallId: toolCall.id, result: "Error interno al guardar la orden." }]
             });
           }
 
           idOrdenFinal = nuevaOrden.id;
-          console.log("Nueva orden creada con éxito:", idOrdenFinal);
         }
 
         return NextResponse.json({
@@ -209,7 +200,6 @@ export async function POST(request: NextRequest) {
 
       // D. HERRAMIENTA: verificar_estado_negocio
       if (functionName === "verificar_estado_negocio") {
-        // Consultamos la columna exactita 'Cuenta Activa' de Supabase
         const { data: bizStatus } = await supabaseAdmin
           .from("businesses")
           .select('"Cuenta Activa"')
@@ -218,7 +208,6 @@ export async function POST(request: NextRequest) {
 
         const estaCuentaActiva = bizStatus?.["Cuenta Activa"];
 
-        // Si Cuenta Activa es false / null, avisamos que está cerrado
         if (estaCuentaActiva === false) {
           return NextResponse.json({
             results: [
@@ -230,7 +219,6 @@ export async function POST(request: NextRequest) {
           });
         }
 
-        // Si la cuenta está activa (TRUE), responde normal que está abierto
         return NextResponse.json({
           results: [
             {
@@ -247,7 +235,6 @@ export async function POST(request: NextRequest) {
       const rawPhone = message?.call?.customer?.number || "";
       const telefonoCliente = rawPhone.replace(/\D/g, "").slice(-10);
 
-      // Consultamos prompt_config y 'Cuenta Activa'
       const { data: business, error: businessError } = await supabaseAdmin
         .from("businesses")
         .select('prompt_config, "Cuenta Activa"')
@@ -310,7 +297,6 @@ export async function POST(request: NextRequest) {
             estado_pedido: estadoPedido,
             detalles_pedido: detallesPedido,
             id_orden: idOrdenActiva,
-            // Inyectamos el estado real de la cuenta
             cuenta_activa: cuentaActiva !== false ? "true" : "false"
           },
           ...(business?.prompt_config && {
