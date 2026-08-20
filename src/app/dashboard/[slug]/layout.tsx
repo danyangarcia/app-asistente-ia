@@ -26,7 +26,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [showSettingsModal, setShowSettingsModal] = useState(false)
   const [cuentaActiva, setCuentaActiva] = useState<boolean>(true)
   const [updatingCuenta, setUpdatingCuenta] = useState(false)
-  const [themeMode, setThemeMode] = useState<'dark' | 'light'>('light') // Cambiado por defecto a light con la paleta nueva
+  const [themeMode, setThemeMode] = useState<'dark' | 'light'>('light')
 
   // Persistencia de tema
   useEffect(() => {
@@ -44,19 +44,25 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     })
   }, [])
 
-  // Propiedades derivadas del tema con los colores exactos solicitados
+  // Propiedades derivadas del tema con contraste mejorado para el Modo Claro
   const isDark = themeMode === 'dark'
   const themeStyles = useMemo(() => ({
-    bgColor: isDark ? '#080808' : '#f3f4f6', // Fondo general gris claro mate
-    textColor: isDark ? '#FFFFFF' : '#111827', // Texto principal negro/gris muy oscuro
-    subTextColor: isDark ? 'rgba(255,255,255,0.45)' : '#4b5563', // Subtítulo de alta legibilidad
-    cardBg: isDark ? 'rgba(255,255,255,0.03)' : '#ffffff', // Botones en blanco puro
-    cardBorder: isDark ? 'rgba(255,255,255,0.07)' : '#d1d5db', // Borde gris suave para botones
+    bgColor: isDark ? '#080808' : '#eef2f6', // Fondo ligeramente más frío y satinado en light
+    textColor: isDark ? '#FFFFFF' : '#0f172a', // Texto slate-900 súper nítido
+    subTextColor: isDark ? 'rgba(255,255,255,0.45)' : '#64748b', // Slate-500 suave
+    cardBg: isDark ? 'rgba(255,255,255,0.03)' : '#ffffff', 
+    cardBorder: isDark ? 'rgba(255,255,255,0.07)' : '#cbd5e1', // Borde sutil pero visible
     buttonShadow: isDark 
       ? '0 8px 25px rgba(0,0,0,0.2)' 
-      : '0 2px 4px rgba(0,0,0,0.06)', // Sombra discreta para botones
-    modalBg: isDark ? '#121216' : '#FFFFFF',
-    modalBorder: isDark ? 'rgba(255,255,255,0.1)' : '#d1d5db'
+      : '0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.04), inset 0 1px 0 #ffffff', // Sombras multinivel en light
+    buttonHoverShadow: isDark 
+      ? '0 12px 30px rgba(0,0,0,0.35)' 
+      : '0 20px 30px -10px rgba(0, 0, 0, 0.12), 0 10px 15px -5px rgba(0, 0, 0, 0.06), inset 0 1px 0 #ffffff',
+    modalBg: isDark ? '#121216' : '#ffffff',
+    modalBorder: isDark ? 'rgba(255,255,255,0.1)' : '#cbd5e1',
+    accentGlow: isDark 
+      ? 'radial-gradient(ellipse 700px 500px at var(--light-x) var(--light-y), rgba(255,255,255,0.018) 0%, transparent 70%)'
+      : 'radial-gradient(ellipse 800px 600px at var(--light-x) var(--light-y), rgba(99, 102, 241, 0.08) 0%, rgba(255,255,255,0) 75%)' // Destello indigo translúcido en light
   }), [isDark])
 
   // Carga de datos del negocio desde Supabase
@@ -170,9 +176,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const lightX = mouse.x * 100
   const lightY = mouse.y * 100
 
-  const isLeftActive = pathname.includes('catalog')
-  const isRightActive = pathname.includes('metrics')
-
   return (
     <div
       style={{
@@ -182,22 +185,24 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         fontFamily: "'Inter', system-ui, sans-serif",
         overflow: 'hidden',
         position: 'relative',
-        transition: 'background 0.3s ease, color 0.3s ease'
+        transition: 'background 0.4s cubic-bezier(0.16, 1, 0.3, 1), color 0.4s ease'
       }}
     >
       <LoadingScreen businessName={businessName} />
 
-      {/* Iluminación Radial */}
+      {/* Iluminación Radial Interactiva (Ajustada para Modo Claro con Resplandor Sutil) */}
       <div style={{
         position: 'fixed', inset: 0, zIndex: 0,
-        background: `radial-gradient(ellipse 700px 500px at ${lightX}% ${lightY}%, ${isDark ? 'rgba(255,255,255,0.018)' : 'rgba(0,0,0,0.012)'} 0%, transparent 70%)`,
+        background: isDark 
+          ? `radial-gradient(ellipse 700px 500px at ${lightX}% ${lightY}%, rgba(255,255,255,0.018) 0%, transparent 70%)`
+          : `radial-gradient(ellipse 750px 550px at ${lightX}% ${lightY}%, rgba(59, 130, 246, 0.06) 0%, rgba(255, 255, 255, 0) 70%)`,
         pointerEvents: 'none', transition: 'background 0.08s linear'
       }} />
 
-      {/* Ruido de Fondo */}
+      {/* Ruido de Fondo Orgánico */}
       <div style={{
         position: 'fixed', inset: 0, zIndex: 0,
-        backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.02'/%3E%3C/svg%3E")`,
+        backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='${isDark ? '0.02' : '0.035'}'/%3E%3C/svg%3E")`,
         backgroundSize: '256px 256px', pointerEvents: 'none'
       }} />
 
@@ -230,7 +235,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             transition={{ delay: 0.2, duration: 0.6 }}
             onHoverStart={() => setHovering('leftBtn')}
             onHoverEnd={() => setHovering(null)}
-            whileHover={{ y: -3, scale: 1.02 }}
+            whileHover={{ y: -4, scale: 1.025 }}
             whileTap={{ y: 1, scale: 0.97 }}
             onClick={() => navigate(config.leftPath, 'left')}
             style={{
@@ -240,17 +245,29 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               padding: '0.9rem 2.5rem', 
               color: themeStyles.textColor, 
               fontSize: '0.78rem',
-              fontWeight: 600, 
+              fontWeight: 700, 
               letterSpacing: '0.15em', 
               textTransform: 'uppercase', 
               cursor: 'pointer',
-              backdropFilter: 'blur(10px)', 
+              backdropFilter: 'blur(12px)', 
               position: 'relative', 
               overflow: 'hidden',
-              boxShadow: themeStyles.buttonShadow,
-              transition: 'all 0.2s ease'
+              boxShadow: hovering === 'leftBtn' ? themeStyles.buttonHoverShadow : themeStyles.buttonShadow,
+              transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)'
             }}
           >
+            {/* Destello interno en hover (Solo Modo Claro) */}
+            {!isDark && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: hovering === 'leftBtn' ? 1 : 0 }}
+                style={{
+                  position: 'absolute', inset: 0,
+                  background: 'linear-gradient(135deg, rgba(255,255,255,0.8) 0%, rgba(241, 245, 249, 0) 100%)',
+                  pointerEvents: 'none'
+                }}
+              />
+            )}
             <span style={{ position: 'relative', zIndex: 1 }}>{config.leftLabel}</span>
           </motion.button>
 
@@ -272,17 +289,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 letterSpacing: '0.15em', margin: 0, lineHeight: 1, color: themeStyles.textColor,
                 textShadow: isDark 
                   ? `0 1px 0 rgba(255,255,255,0.25), 0 2px 0 rgba(180,180,180,0.15), 0 4px 0 rgba(120,120,120,0.1)` 
-                  : `0 1px 2px rgba(0,0,0,0.05)`
+                  : `0 2px 10px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)` // Sombra esculpida nítida en light
               }}>
                 {businessName}
               </h1>
               <p style={{
                 fontSize: '0.75rem', 
                 letterSpacing: '0.3em', 
-                color: themeStyles.subTextColor, // Cambiado a #4b5563 para mejor lectura
+                color: themeStyles.subTextColor,
                 textTransform: 'uppercase', 
                 marginTop: '0.8rem', 
-                fontWeight: 600
+                fontWeight: 700
               }}>
                 {config.panelName}
               </p>
@@ -296,7 +313,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             transition={{ delay: 0.2, duration: 0.6 }}
             onHoverStart={() => setHovering('rightBtn')}
             onHoverEnd={() => setHovering(null)}
-            whileHover={{ y: -3, scale: 1.02 }}
+            whileHover={{ y: -4, scale: 1.025 }}
             whileTap={{ y: 1, scale: 0.97 }}
             onClick={() => navigate(rightPath, 'right')}
             style={{
@@ -306,17 +323,28 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               padding: '0.9rem 2.5rem', 
               color: themeStyles.textColor, 
               fontSize: '0.78rem',
-              fontWeight: 600, 
+              fontWeight: 700, 
               letterSpacing: '0.15em', 
               textTransform: 'uppercase', 
               cursor: 'pointer',
-              backdropFilter: 'blur(10px)', 
+              backdropFilter: 'blur(12px)', 
               position: 'relative', 
               overflow: 'hidden',
-              boxShadow: themeStyles.buttonShadow,
-              transition: 'all 0.2s ease'
+              boxShadow: hovering === 'rightBtn' ? themeStyles.buttonHoverShadow : themeStyles.buttonShadow,
+              transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)'
             }}
           >
+            {!isDark && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: hovering === 'rightBtn' ? 1 : 0 }}
+                style={{
+                  position: 'absolute', inset: 0,
+                  background: 'linear-gradient(135deg, rgba(255,255,255,0.8) 0%, rgba(241, 245, 249, 0) 100%)',
+                  pointerEvents: 'none'
+                }}
+              />
+            )}
             <span style={{ position: 'relative', zIndex: 1 }}>Métricas</span>
           </motion.button>
         </div>
@@ -336,21 +364,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Botón Flotante Configuración */}
       <div style={{ position: 'fixed', bottom: '1.5rem', right: '1.5rem', zIndex: 99 }}>
         <motion.button
-          whileHover={{ scale: 1.08, rotate: 45 }}
-          whileTap={{ scale: 0.95 }}
+          whileHover={{ scale: 1.1, rotate: 90 }}
+          whileTap={{ scale: 0.9 }}
           onClick={() => setShowSettingsModal(true)}
           style={{
             background: isDark ? 'rgba(20, 20, 25, 0.85)' : '#ffffff',
             border: `1px solid ${themeStyles.cardBorder}`,
             borderRadius: '50%',
-            width: '48px',
-            height: '48px',
+            width: '52px',
+            height: '52px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             color: themeStyles.textColor,
             cursor: 'pointer',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.08)'
+            boxShadow: isDark ? '0 4px 12px rgba(0,0,0,0.3)' : '0 10px 25px -3px rgba(0, 0, 0, 0.12), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+            backdropFilter: 'blur(8px)',
+            transition: 'box-shadow 0.3s ease'
           }}
           title="Configuración del Negocio"
         >
@@ -380,23 +410,26 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             exit={{ opacity: 0 }}
             style={{
               position: 'fixed', inset: 0, zIndex: 100,
-              background: isDark ? 'rgba(0,0,0,0.8)' : 'rgba(0,0,0,0.3)', backdropFilter: 'blur(6px)',
+              background: isDark ? 'rgba(0,0,0,0.8)' : 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(8px)',
               display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem'
             }}
           >
             <motion.div
-              initial={{ scale: 0.95, y: 10 }}
+              initial={{ scale: 0.92, y: 15 }}
               animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.95, y: 10 }}
+              exit={{ scale: 0.92, y: 15 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
               style={{
                 background: themeStyles.modalBg,
                 border: `1px solid ${themeStyles.modalBorder}`,
-                borderRadius: '16px',
-                padding: '1.8rem',
+                borderRadius: '20px',
+                padding: '2rem',
                 width: '100%',
                 maxWidth: '420px',
                 position: 'relative',
-                boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
+                boxShadow: isDark 
+                  ? '0 25px 50px -12px rgba(0, 0, 0, 0.5)' 
+                  : '0 25px 50px -12px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0,0,0,0.02)',
                 color: themeStyles.textColor
               }}
             >
@@ -405,33 +438,34 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 style={{
                   position: 'absolute', top: '1.2rem', right: '1.2rem',
                   background: 'transparent', border: 'none', color: themeStyles.subTextColor,
-                  fontSize: '1.2rem', cursor: 'pointer'
+                  fontSize: '1.2rem', cursor: 'pointer', padding: '0.2rem 0.5rem', borderRadius: '6px'
                 }}
               >
                 ✕
               </button>
 
-              <h3 style={{ margin: '0 0 0.3rem 0', fontSize: '1.2rem', fontWeight: 700 }}>
+              <h3 style={{ margin: '0 0 0.3rem 0', fontSize: '1.25rem', fontWeight: 800 }}>
                 ⚙️ Ajustes del Negocio
               </h3>
-              <p style={{ margin: '0 0 1.5rem 0', fontSize: '0.75rem', color: themeStyles.subTextColor }}>
+              <p style={{ margin: '0 0 1.5rem 0', fontSize: '0.78rem', color: themeStyles.subTextColor }}>
                 Administra la disponibilidad y la apariencia visual del panel.
               </p>
 
               {/* Estado de la Cuenta */}
               <div style={{
-                background: isDark ? 'rgba(255,255,255,0.03)' : '#f9fafb',
+                background: isDark ? 'rgba(255,255,255,0.03)' : '#f8fafc',
                 border: `1px solid ${themeStyles.cardBorder}`,
-                borderRadius: '12px',
-                padding: '1rem',
+                borderRadius: '14px',
+                padding: '1.1rem',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                marginBottom: '1rem'
+                marginBottom: '1rem',
+                boxShadow: isDark ? 'none' : 'inset 0 1px 2px rgba(0,0,0,0.02)'
               }}>
                 <div>
-                  <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 600 }}>Estado de la Cuenta</p>
-                  <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.7rem', color: themeStyles.subTextColor }}>
+                  <p style={{ margin: 0, fontSize: '0.88rem', fontWeight: 700 }}>Estado de la Cuenta</p>
+                  <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.72rem', color: themeStyles.subTextColor, fontWeight: 500 }}>
                     {cuentaActiva ? 'Atendiendo pedidos' : 'Cerrado temporalmente'}
                   </p>
                 </div>
@@ -440,13 +474,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   onClick={toggleCuentaActiva}
                   disabled={updatingCuenta}
                   style={{
-                    padding: '0.4rem 0.9rem',
+                    padding: '0.45rem 1rem',
                     borderRadius: '20px',
                     fontSize: '0.75rem',
                     fontWeight: 700,
                     cursor: 'pointer',
                     border: cuentaActiva ? '1px solid rgba(16,185,129,0.4)' : '1px solid rgba(244,63,94,0.4)',
-                    background: cuentaActiva ? 'rgba(16,185,129,0.15)' : 'rgba(244,63,94,0.15)',
+                    background: cuentaActiva ? 'rgba(16,185,129,0.12)' : 'rgba(244,63,94,0.12)',
                     color: cuentaActiva ? '#059669' : '#e11d48',
                     transition: 'all 0.2s ease'
                   }}
@@ -457,17 +491,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
               {/* Aspecto Visual */}
               <div style={{
-                background: isDark ? 'rgba(255,255,255,0.03)' : '#f9fafb',
+                background: isDark ? 'rgba(255,255,255,0.03)' : '#f8fafc',
                 border: `1px solid ${themeStyles.cardBorder}`,
-                borderRadius: '12px',
-                padding: '1rem',
+                borderRadius: '14px',
+                padding: '1.1rem',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'space-between'
+                justifyContent: 'space-between',
+                boxShadow: isDark ? 'none' : 'inset 0 1px 2px rgba(0,0,0,0.02)'
               }}>
                 <div>
-                  <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 600 }}>Aspecto Visual</p>
-                  <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.7rem', color: themeStyles.subTextColor }}>
+                  <p style={{ margin: 0, fontSize: '0.88rem', fontWeight: 700 }}>Aspecto Visual</p>
+                  <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.72rem', color: themeStyles.subTextColor, fontWeight: 500 }}>
                     Modo {isDark ? 'Oscuro' : 'Claro (Mate)'}
                   </p>
                 </div>
@@ -475,7 +510,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <button
                   onClick={toggleTheme}
                   style={{
-                    padding: '0.4rem 0.9rem',
+                    padding: '0.45rem 1rem',
                     borderRadius: '20px',
                     fontSize: '0.75rem',
                     fontWeight: 700,
@@ -483,6 +518,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     border: `1px solid ${themeStyles.cardBorder}`,
                     background: themeStyles.cardBg,
                     color: themeStyles.textColor,
+                    boxShadow: isDark ? 'none' : '0 2px 4px rgba(0,0,0,0.05)',
                     transition: 'all 0.2s ease'
                   }}
                 >
@@ -495,16 +531,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 style={{
                   marginTop: '1.5rem',
                   width: '100%',
-                  padding: '0.75rem',
-                  borderRadius: '10px',
+                  padding: '0.8rem',
+                  borderRadius: '12px',
                   border: 'none',
-                  background: isDark ? 'rgba(255,255,255,0.08)' : '#e5e7eb',
-                  color: themeStyles.textColor,
+                  background: isDark ? 'rgba(255,255,255,0.08)' : '#0f172a',
+                  color: isDark ? themeStyles.textColor : '#ffffff',
                   fontSize: '0.8rem',
-                  fontWeight: 600,
+                  fontWeight: 700,
                   textTransform: 'uppercase',
-                  letterSpacing: '0.05em',
-                  cursor: 'pointer'
+                  letterSpacing: '0.08em',
+                  cursor: 'pointer',
+                  boxShadow: isDark ? 'none' : '0 4px 12px rgba(15, 23, 42, 0.15)',
+                  transition: 'transform 0.1s ease, background 0.2s ease'
                 }}
               >
                 Cerrar
