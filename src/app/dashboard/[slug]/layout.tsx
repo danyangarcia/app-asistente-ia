@@ -44,25 +44,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     })
   }, [])
 
-  // Propiedades derivadas del tema con contraste mejorado para el Modo Claro
+  // Propiedades derivadas del tema con contraste marcado para el Modo Claro
   const isDark = themeMode === 'dark'
   const themeStyles = useMemo(() => ({
-    bgColor: isDark ? '#080808' : '#eef2f6', // Fondo ligeramente más frío y satinado en light
-    textColor: isDark ? '#FFFFFF' : '#0f172a', // Texto slate-900 súper nítido
-    subTextColor: isDark ? 'rgba(255,255,255,0.45)' : '#64748b', // Slate-500 suave
-    cardBg: isDark ? 'rgba(255,255,255,0.03)' : '#ffffff', 
-    cardBorder: isDark ? 'rgba(255,255,255,0.07)' : '#cbd5e1', // Borde sutil pero visible
+    bgColor: isDark ? '#080808' : '#e2e8f0', // Fondo gris slate nítido en light
+    textColor: isDark ? '#FFFFFF' : '#0f172a', // Texto principal oscuro e intenso
+    subTextColor: isDark ? 'rgba(255,255,255,0.45)' : '#475569', // Texto secundario gris plomo de alta legibilidad
+    cardBg: isDark ? 'rgba(255,255,255,0.03)' : '#cbd5e1', // Botones en un gris mate con contraste real
+    cardBorder: isDark ? 'rgba(255,255,255,0.07)' : '#94a3b8', // Borde definido gris acero
     buttonShadow: isDark 
       ? '0 8px 25px rgba(0,0,0,0.2)' 
-      : '0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.04), inset 0 1px 0 #ffffff', // Sombras multinivel en light
+      : '0 4px 12px rgba(15, 23, 42, 0.08), inset 0 1px 0 rgba(255,255,255,0.6)', // Sombras de profundidad real
     buttonHoverShadow: isDark 
       ? '0 12px 30px rgba(0,0,0,0.35)' 
-      : '0 20px 30px -10px rgba(0, 0, 0, 0.12), 0 10px 15px -5px rgba(0, 0, 0, 0.06), inset 0 1px 0 #ffffff',
-    modalBg: isDark ? '#121216' : '#ffffff',
+      : '0 8px 20px rgba(15, 23, 42, 0.15), inset 0 1px 0 rgba(255,255,255,0.8)',
+    modalBg: isDark ? '#121216' : '#f8fafc',
     modalBorder: isDark ? 'rgba(255,255,255,0.1)' : '#cbd5e1',
-    accentGlow: isDark 
-      ? 'radial-gradient(ellipse 700px 500px at var(--light-x) var(--light-y), rgba(255,255,255,0.018) 0%, transparent 70%)'
-      : 'radial-gradient(ellipse 800px 600px at var(--light-x) var(--light-y), rgba(99, 102, 241, 0.08) 0%, rgba(255,255,255,0) 75%)' // Destello indigo translúcido en light
   }), [isDark])
 
   // Carga de datos del negocio desde Supabase
@@ -185,24 +182,24 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         fontFamily: "'Inter', system-ui, sans-serif",
         overflow: 'hidden',
         position: 'relative',
-        transition: 'background 0.4s cubic-bezier(0.16, 1, 0.3, 1), color 0.4s ease'
+        transition: 'background 0.3s ease, color 0.3s ease'
       }}
     >
       <LoadingScreen businessName={businessName} />
 
-      {/* Iluminación Radial Interactiva (Ajustada para Modo Claro con Resplandor Sutil) */}
+      {/* Iluminación Radial Interactiva */}
       <div style={{
         position: 'fixed', inset: 0, zIndex: 0,
         background: isDark 
           ? `radial-gradient(ellipse 700px 500px at ${lightX}% ${lightY}%, rgba(255,255,255,0.018) 0%, transparent 70%)`
-          : `radial-gradient(ellipse 750px 550px at ${lightX}% ${lightY}%, rgba(59, 130, 246, 0.06) 0%, rgba(255, 255, 255, 0) 70%)`,
+          : `radial-gradient(ellipse 750px 550px at ${lightX}% ${lightY}%, rgba(255, 255, 255, 0.4) 0%, rgba(226, 232, 240, 0) 70%)`,
         pointerEvents: 'none', transition: 'background 0.08s linear'
       }} />
 
-      {/* Ruido de Fondo Orgánico */}
+      {/* Ruido de Fondo */}
       <div style={{
         position: 'fixed', inset: 0, zIndex: 0,
-        backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='${isDark ? '0.02' : '0.035'}'/%3E%3C/svg%3E")`,
+        backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='${isDark ? '0.02' : '0.03'}'/%3E%3C/svg%3E")`,
         backgroundSize: '256px 256px', pointerEvents: 'none'
       }} />
 
@@ -235,39 +232,27 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             transition={{ delay: 0.2, duration: 0.6 }}
             onHoverStart={() => setHovering('leftBtn')}
             onHoverEnd={() => setHovering(null)}
-            whileHover={{ y: -4, scale: 1.025 }}
+            whileHover={{ y: -3, scale: 1.02 }}
             whileTap={{ y: 1, scale: 0.97 }}
             onClick={() => navigate(config.leftPath, 'left')}
             style={{
-              background: themeStyles.cardBg,
+              background: hovering === 'leftBtn' && !isDark ? '#cbd5e1' : themeStyles.cardBg,
               border: `1px solid ${themeStyles.cardBorder}`,
               borderRadius: '100px', 
               padding: '0.9rem 2.5rem', 
               color: themeStyles.textColor, 
               fontSize: '0.78rem',
-              fontWeight: 700, 
+              fontWeight: 800, 
               letterSpacing: '0.15em', 
               textTransform: 'uppercase', 
               cursor: 'pointer',
-              backdropFilter: 'blur(12px)', 
+              backdropFilter: 'blur(10px)', 
               position: 'relative', 
               overflow: 'hidden',
               boxShadow: hovering === 'leftBtn' ? themeStyles.buttonHoverShadow : themeStyles.buttonShadow,
-              transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)'
+              transition: 'all 0.2s ease'
             }}
           >
-            {/* Destello interno en hover (Solo Modo Claro) */}
-            {!isDark && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: hovering === 'leftBtn' ? 1 : 0 }}
-                style={{
-                  position: 'absolute', inset: 0,
-                  background: 'linear-gradient(135deg, rgba(255,255,255,0.8) 0%, rgba(241, 245, 249, 0) 100%)',
-                  pointerEvents: 'none'
-                }}
-              />
-            )}
             <span style={{ position: 'relative', zIndex: 1 }}>{config.leftLabel}</span>
           </motion.button>
 
@@ -289,7 +274,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 letterSpacing: '0.15em', margin: 0, lineHeight: 1, color: themeStyles.textColor,
                 textShadow: isDark 
                   ? `0 1px 0 rgba(255,255,255,0.25), 0 2px 0 rgba(180,180,180,0.15), 0 4px 0 rgba(120,120,120,0.1)` 
-                  : `0 2px 10px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)` // Sombra esculpida nítida en light
+                  : `0 2px 4px rgba(0,0,0,0.08)`
               }}>
                 {businessName}
               </h1>
@@ -313,38 +298,27 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             transition={{ delay: 0.2, duration: 0.6 }}
             onHoverStart={() => setHovering('rightBtn')}
             onHoverEnd={() => setHovering(null)}
-            whileHover={{ y: -4, scale: 1.025 }}
+            whileHover={{ y: -3, scale: 1.02 }}
             whileTap={{ y: 1, scale: 0.97 }}
             onClick={() => navigate(rightPath, 'right')}
             style={{
-              background: themeStyles.cardBg,
+              background: hovering === 'rightBtn' && !isDark ? '#cbd5e1' : themeStyles.cardBg,
               border: `1px solid ${themeStyles.cardBorder}`,
               borderRadius: '100px', 
               padding: '0.9rem 2.5rem', 
               color: themeStyles.textColor, 
               fontSize: '0.78rem',
-              fontWeight: 700, 
+              fontWeight: 800, 
               letterSpacing: '0.15em', 
               textTransform: 'uppercase', 
               cursor: 'pointer',
-              backdropFilter: 'blur(12px)', 
+              backdropFilter: 'blur(10px)', 
               position: 'relative', 
               overflow: 'hidden',
               boxShadow: hovering === 'rightBtn' ? themeStyles.buttonHoverShadow : themeStyles.buttonShadow,
-              transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)'
+              transition: 'all 0.2s ease'
             }}
           >
-            {!isDark && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: hovering === 'rightBtn' ? 1 : 0 }}
-                style={{
-                  position: 'absolute', inset: 0,
-                  background: 'linear-gradient(135deg, rgba(255,255,255,0.8) 0%, rgba(241, 245, 249, 0) 100%)',
-                  pointerEvents: 'none'
-                }}
-              />
-            )}
             <span style={{ position: 'relative', zIndex: 1 }}>Métricas</span>
           </motion.button>
         </div>
@@ -364,23 +338,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Botón Flotante Configuración */}
       <div style={{ position: 'fixed', bottom: '1.5rem', right: '1.5rem', zIndex: 99 }}>
         <motion.button
-          whileHover={{ scale: 1.1, rotate: 90 }}
-          whileTap={{ scale: 0.9 }}
+          whileHover={{ scale: 1.08, rotate: 45 }}
+          whileTap={{ scale: 0.95 }}
           onClick={() => setShowSettingsModal(true)}
           style={{
-            background: isDark ? 'rgba(20, 20, 25, 0.85)' : '#ffffff',
+            background: isDark ? 'rgba(20, 20, 25, 0.85)' : '#cbd5e1',
             border: `1px solid ${themeStyles.cardBorder}`,
             borderRadius: '50%',
-            width: '52px',
-            height: '52px',
+            width: '48px',
+            height: '48px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             color: themeStyles.textColor,
             cursor: 'pointer',
-            boxShadow: isDark ? '0 4px 12px rgba(0,0,0,0.3)' : '0 10px 25px -3px rgba(0, 0, 0, 0.12), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
-            backdropFilter: 'blur(8px)',
-            transition: 'box-shadow 0.3s ease'
+            boxShadow: '0 4px 12px rgba(0,0,0,0.12)'
           }}
           title="Configuración del Negocio"
         >
@@ -410,26 +382,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             exit={{ opacity: 0 }}
             style={{
               position: 'fixed', inset: 0, zIndex: 100,
-              background: isDark ? 'rgba(0,0,0,0.8)' : 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(8px)',
+              background: isDark ? 'rgba(0,0,0,0.8)' : 'rgba(15, 23, 42, 0.35)', backdropFilter: 'blur(6px)',
               display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem'
             }}
           >
             <motion.div
-              initial={{ scale: 0.92, y: 15 }}
+              initial={{ scale: 0.95, y: 10 }}
               animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.92, y: 15 }}
-              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              exit={{ scale: 0.95, y: 10 }}
               style={{
                 background: themeStyles.modalBg,
                 border: `1px solid ${themeStyles.modalBorder}`,
-                borderRadius: '20px',
-                padding: '2rem',
+                borderRadius: '16px',
+                padding: '1.8rem',
                 width: '100%',
                 maxWidth: '420px',
                 position: 'relative',
-                boxShadow: isDark 
-                  ? '0 25px 50px -12px rgba(0, 0, 0, 0.5)' 
-                  : '0 25px 50px -12px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0,0,0,0.02)',
+                boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
                 color: themeStyles.textColor
               }}
             >
@@ -438,34 +407,33 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 style={{
                   position: 'absolute', top: '1.2rem', right: '1.2rem',
                   background: 'transparent', border: 'none', color: themeStyles.subTextColor,
-                  fontSize: '1.2rem', cursor: 'pointer', padding: '0.2rem 0.5rem', borderRadius: '6px'
+                  fontSize: '1.2rem', cursor: 'pointer'
                 }}
               >
                 ✕
               </button>
 
-              <h3 style={{ margin: '0 0 0.3rem 0', fontSize: '1.25rem', fontWeight: 800 }}>
+              <h3 style={{ margin: '0 0 0.3rem 0', fontSize: '1.2rem', fontWeight: 700 }}>
                 ⚙️ Ajustes del Negocio
               </h3>
-              <p style={{ margin: '0 0 1.5rem 0', fontSize: '0.78rem', color: themeStyles.subTextColor }}>
+              <p style={{ margin: '0 0 1.5rem 0', fontSize: '0.75rem', color: themeStyles.subTextColor }}>
                 Administra la disponibilidad y la apariencia visual del panel.
               </p>
 
               {/* Estado de la Cuenta */}
               <div style={{
-                background: isDark ? 'rgba(255,255,255,0.03)' : '#f8fafc',
+                background: isDark ? 'rgba(255,255,255,0.03)' : '#e2e8f0',
                 border: `1px solid ${themeStyles.cardBorder}`,
-                borderRadius: '14px',
-                padding: '1.1rem',
+                borderRadius: '12px',
+                padding: '1rem',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                marginBottom: '1rem',
-                boxShadow: isDark ? 'none' : 'inset 0 1px 2px rgba(0,0,0,0.02)'
+                marginBottom: '1rem'
               }}>
                 <div>
-                  <p style={{ margin: 0, fontSize: '0.88rem', fontWeight: 700 }}>Estado de la Cuenta</p>
-                  <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.72rem', color: themeStyles.subTextColor, fontWeight: 500 }}>
+                  <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 600 }}>Estado de la Cuenta</p>
+                  <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.7rem', color: themeStyles.subTextColor }}>
                     {cuentaActiva ? 'Atendiendo pedidos' : 'Cerrado temporalmente'}
                   </p>
                 </div>
@@ -474,13 +442,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   onClick={toggleCuentaActiva}
                   disabled={updatingCuenta}
                   style={{
-                    padding: '0.45rem 1rem',
+                    padding: '0.4rem 0.9rem',
                     borderRadius: '20px',
                     fontSize: '0.75rem',
                     fontWeight: 700,
                     cursor: 'pointer',
                     border: cuentaActiva ? '1px solid rgba(16,185,129,0.4)' : '1px solid rgba(244,63,94,0.4)',
-                    background: cuentaActiva ? 'rgba(16,185,129,0.12)' : 'rgba(244,63,94,0.12)',
+                    background: cuentaActiva ? 'rgba(16,185,129,0.15)' : 'rgba(244,63,94,0.15)',
                     color: cuentaActiva ? '#059669' : '#e11d48',
                     transition: 'all 0.2s ease'
                   }}
@@ -491,26 +459,25 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
               {/* Aspecto Visual */}
               <div style={{
-                background: isDark ? 'rgba(255,255,255,0.03)' : '#f8fafc',
+                background: isDark ? 'rgba(255,255,255,0.03)' : '#e2e8f0',
                 border: `1px solid ${themeStyles.cardBorder}`,
-                borderRadius: '14px',
-                padding: '1.1rem',
+                borderRadius: '12px',
+                padding: '1rem',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'space-between',
-                boxShadow: isDark ? 'none' : 'inset 0 1px 2px rgba(0,0,0,0.02)'
+                justifyContent: 'space-between'
               }}>
                 <div>
-                  <p style={{ margin: 0, fontSize: '0.88rem', fontWeight: 700 }}>Aspecto Visual</p>
-                  <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.72rem', color: themeStyles.subTextColor, fontWeight: 500 }}>
-                    Modo {isDark ? 'Oscuro' : 'Claro (Mate)'}
+                  <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 600 }}>Aspecto Visual</p>
+                  <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.7rem', color: themeStyles.subTextColor }}>
+                    Modo {isDark ? 'Oscuro' : 'Claro'}
                   </p>
                 </div>
 
                 <button
                   onClick={toggleTheme}
                   style={{
-                    padding: '0.45rem 1rem',
+                    padding: '0.4rem 0.9rem',
                     borderRadius: '20px',
                     fontSize: '0.75rem',
                     fontWeight: 700,
@@ -518,7 +485,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     border: `1px solid ${themeStyles.cardBorder}`,
                     background: themeStyles.cardBg,
                     color: themeStyles.textColor,
-                    boxShadow: isDark ? 'none' : '0 2px 4px rgba(0,0,0,0.05)',
                     transition: 'all 0.2s ease'
                   }}
                 >
@@ -531,18 +497,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 style={{
                   marginTop: '1.5rem',
                   width: '100%',
-                  padding: '0.8rem',
-                  borderRadius: '12px',
+                  padding: '0.75rem',
+                  borderRadius: '10px',
                   border: 'none',
-                  background: isDark ? 'rgba(255,255,255,0.08)' : '#0f172a',
-                  color: isDark ? themeStyles.textColor : '#ffffff',
+                  background: isDark ? 'rgba(255,255,255,0.08)' : '#cbd5e1',
+                  color: themeStyles.textColor,
                   fontSize: '0.8rem',
-                  fontWeight: 700,
+                  fontWeight: 600,
                   textTransform: 'uppercase',
-                  letterSpacing: '0.08em',
-                  cursor: 'pointer',
-                  boxShadow: isDark ? 'none' : '0 4px 12px rgba(15, 23, 42, 0.15)',
-                  transition: 'transform 0.1s ease, background 0.2s ease'
+                  letterSpacing: '0.05em',
+                  cursor: 'pointer'
                 }}
               >
                 Cerrar
