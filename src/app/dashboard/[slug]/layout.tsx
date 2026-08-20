@@ -17,6 +17,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [mouse, setMouse] = useState({ x: 0.5, y: 0.5 })
   const [hovering, setHovering] = useState<'leftBtn' | 'rightBtn' | null>(null)
 
+  // ESTADOS PARA EL MODAL DE SETTINGS Y LA COLUMNA "Cuenta Activa"
+  const [showSettingsModal, setShowSettingsModal] = useState(false)
+  const [cuentaActiva, setCuentaActiva] = useState<boolean>(true)
+  const [updatingCuenta, setUpdatingCuenta] = useState(false)
+
   const supabase = createClient()
 
   useEffect(() => {
@@ -28,8 +33,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         .eq('enlace del panel', slug)
         .single()
 
-      if (data) setBusiness(data)
-      else console.error('Error al cargar negocio en layout:', error)
+      if (data) {
+        setBusiness(data)
+        // Carga directa del campo "Cuenta Activa"
+        if (typeof data['Cuenta Activa'] === 'boolean') {
+          setCuentaActiva(data['Cuenta Activa'])
+        }
+      } else {
+        console.error('Error al cargar negocio en layout:', error)
+      }
     }
     fetchLayoutData()
   }, [slug, supabase])
@@ -38,6 +50,28 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const timer = setTimeout(() => setLoaded(true), 2800)
     return () => clearTimeout(timer)
   }, [])
+
+  // ACTUALIZACIÓN DE "Cuenta Activa" EN SUPABASE CON UI OPTIMISTA
+  const toggleCuentaActiva = async () => {
+    if (!slug) return
+    const nuevoEstado = !cuentaActiva
+    
+    // Cambio instantáneo en pantalla
+    setCuentaActiva(nuevoEstado)
+    setUpdatingCuenta(true)
+
+    const { error } = await supabase
+      .from('businesses')
+      .update({ 'Cuenta Activa': nuevoEstado })
+      .eq('enlace del panel', slug)
+
+    if (error) {
+      console.error('Error al actualizar Cuenta Activa:', error)
+      setCuentaActiva(!nuevoEstado) // Revertir si hay fallo
+    }
+
+    setUpdatingCuenta(false)
+  }
 
   const handleMouseMove = (e: React.MouseEvent) => {
     setMouse({
@@ -67,7 +101,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const rightPath = `/dashboard/${slug}/metrics`
 
-  // Redirección Automática si entra a la raíz del panel (ej. /dashboard/prueba)
+  // Redirección Automática si entra a la raíz del panel (ej. /dashboard/tacos-luis)
   useEffect(() => {
     if (pathname === `/dashboard/${slug}` && loaded) {
       router.replace(config.mainPath)
@@ -226,6 +260,151 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {children}
         </motion.div>
       </motion.div>
+
+      {/* BOTÓN FLOTANTE CONFIGURACIÓN (ESQUINA INFERIOR DERECHA) */}
+      <div style={{ position: 'fixed', bottom: '1.5rem', right: '1.5rem', zIndex: 99 }}>
+        <motion.button
+          whileHover={{ scale: 1.1, rotate: 45 }}
+          whileTap={{ scale: 0.9 }}
+          onClick={() => setShowSettingsModal(true)}
+          style={{
+            background: 'rgba(20, 20, 25, 0.85)',
+            border: '1px solid rgba(255, 255, 255, 0.15)',
+            borderRadius: '50%',
+            width: '50px',
+            height: '50px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#fff',
+            cursor: 'pointer',
+            backdropFilter: 'blur(10px)',
+            boxShadow: '0 10px 25px rgba(0,0,0,0.5)'
+          }}
+          title="Configuración del Negocio"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="22"
+            height="22"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+            <circle cx="12" cy="12" r="3" />
+          </svg>
+        </motion.button>
+      </div>
+
+      {/* MODAL DE CONFIGURACIÓN */}
+      <AnimatePresence>
+        {showSettingsModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={{
+              position: 'fixed', inset: 0, zIndex: 100,
+              background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem'
+            }}
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              style={{
+                background: '#121216',
+                border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: '16px',
+                padding: '1.8rem',
+                width: '100%',
+                maxWidth: '420px',
+                position: 'relative',
+                boxShadow: '0 20px 40px rgba(0,0,0,0.8)'
+              }}
+            >
+              <button
+                onClick={() => setShowSettingsModal(false)}
+                style={{
+                  position: 'absolute', top: '1.2rem', right: '1.2rem',
+                  background: 'transparent', border: 'none', color: '#888',
+                  fontSize: '1.2rem', cursor: 'pointer'
+                }}
+              >
+                ✕
+              </button>
+
+              <h3 style={{ margin: '0 0 0.3rem 0', fontSize: '1.2rem', fontWeight: 700 }}>
+                ⚙️ Ajustes del Negocio
+              </h3>
+              <p style={{ margin: '0 0 1.5rem 0', fontSize: '0.75rem', color: '#888' }}>
+                Administra la disponibilidad operativa para llamadas de Vapi.
+              </p>
+
+              <div style={{
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid rgba(255,255,255,0.07)',
+                borderRadius: '12px',
+                padding: '1rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between'
+              }}>
+                <div>
+                  <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 600 }}>Estado de la Cuenta</p>
+                  <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.7rem', color: '#aaa' }}>
+                    {cuentaActiva ? 'Atendiendo pedidos' : 'Cerrado temporalmente'}
+                  </p>
+                </div>
+
+                <button
+                  onClick={toggleCuentaActiva}
+                  disabled={updatingCuenta}
+                  style={{
+                    padding: '0.4rem 0.9rem',
+                    borderRadius: '20px',
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    border: cuentaActiva ? '1px solid rgba(16,185,129,0.4)' : '1px solid rgba(244,63,94,0.4)',
+                    background: cuentaActiva ? 'rgba(16,185,129,0.15)' : 'rgba(244,63,94,0.15)',
+                    color: cuentaActiva ? '#34d399' : '#fb7185',
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  {updatingCuenta ? 'Guardando...' : cuentaActiva ? '● Abierto' : '○ Cerrado'}
+                </button>
+              </div>
+
+              <button
+                onClick={() => setShowSettingsModal(false)}
+                style={{
+                  marginTop: '1.5rem',
+                  width: '100%',
+                  padding: '0.75rem',
+                  borderRadius: '10px',
+                  border: 'none',
+                  background: 'rgba(255,255,255,0.08)',
+                  color: '#fff',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  cursor: 'pointer'
+                }}
+              >
+                Cerrar
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
     </div>
   )
 }
