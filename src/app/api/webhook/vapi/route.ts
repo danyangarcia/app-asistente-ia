@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      // B. HERRAMIENTA: crear_orden
+      // B. HERRAMIENTA: crear_orden (ACTUALIZA SI EXISTE ORDEN ACTIVA, CREA SI NO)
       if (functionName === "crear_orden") {
         const callId = message?.call?.id;
         const rawPhone = message?.call?.customer?.number || args.cliente_telefono || "";
@@ -60,10 +60,12 @@ export async function POST(request: NextRequest) {
         const { business_slug, cliente_nombre, tipo, direccion, items } = args;
         const slugNegocio = business_slug || "tacos-luis";
 
+        // Limpiar el nombre para que nunca se guarde literal como "nuevo"
         let nombreLimpio = cliente_nombre && cliente_nombre.toLowerCase() !== "nuevo"
           ? cliente_nombre
           : "Cliente en llamada";
 
+        // 1. Leer precios reales desde catalog_items de Supabase
         let totalCalculado = 0;
         const itemsProcesados = [];
 
@@ -81,6 +83,7 @@ export async function POST(request: NextRequest) {
 
             let precioUnitario = productoBD?.price ? Number(productoBD.price) : 0;
            
+            // Fallback por si la IA pide refresco/soda general
             if (precioUnitario === 0 && (nombreItem.toLowerCase().includes("pepsi") || nombreItem.toLowerCase().includes("soda") || nombreItem.toLowerCase().includes("refresco"))) {
               const { data: prodSoda } = await supabaseAdmin
                 .from("catalog_items")
@@ -106,6 +109,7 @@ export async function POST(request: NextRequest) {
 
         const totalLimpio = Math.round(totalCalculado * 100) / 100;
 
+        // 2. BUSCAR SI EL CLIENTE YA TIENE UNA ORDEN ACTIVA/PENDIENTE
         let ordenExistente = null;
         if (telefonoCliente) {
           const { data: encontrada } = await supabaseAdmin
@@ -125,6 +129,7 @@ export async function POST(request: NextRequest) {
         let idOrdenFinal;
 
         if (ordenExistente) {
+          // SI YA TIENE ORDEN ACTIVA: Actualizamos sumando los nuevos items y recalculando el total
           const itemsActualizados = [...(ordenExistente.items || []), ...itemsProcesados];
           const nuevoTotalGeneral = Number(ordenExistente.total || 0) + totalLimpio;
 
@@ -143,7 +148,9 @@ export async function POST(request: NextRequest) {
             .eq("id", ordenExistente.id);
 
           idOrdenFinal = ordenExistente.id;
+          console.log("Orden activa actualizada con éxito:", idOrdenFinal);
         } else {
+          // SI NO TIENE ORDEN ACTIVA: Creamos una nueva
           const { data: nuevaOrden, error: createError } = await supabaseAdmin
             .from("orders")
             .insert({
@@ -162,12 +169,14 @@ export async function POST(request: NextRequest) {
             .single();
 
           if (createError) {
+            console.error("Error guardando orden:", createError);
             return NextResponse.json({
               results: [{ toolCallId: toolCall.id, result: "Error interno al guardar la orden." }]
             });
           }
 
           idOrdenFinal = nuevaOrden.id;
+          console.log("Nueva orden creada con éxito:", idOrdenFinal);
         }
 
         return NextResponse.json({
@@ -202,13 +211,13 @@ export async function POST(request: NextRequest) {
       if (functionName === "verificar_estado_negocio") {
         const { data: bizStatus } = await supabaseAdmin
           .from("businesses")
-          .select('"Cuenta Activa"')
+          .select("is_manual_closed")
           .eq("enlace del panel", "tacos-luis")
           .maybeSingle();
 
-        const estaCuentaActiva = bizStatus?.["Cuenta Activa"];
+        const estaCerradoManual = bizStatus?.is_manual_closed;
 
-        if (estaCuentaActiva === false) {
+        if (estaCerradoManual) {
           return NextResponse.json({
             results: [
               {
@@ -237,7 +246,7 @@ export async function POST(request: NextRequest) {
 
       const { data: business, error: businessError } = await supabaseAdmin
         .from("businesses")
-        .select('prompt_config, "Cuenta Activa"')
+        .select("prompt_config, is_manual_closed")
         .eq("enlace del panel", "tacos-luis")
         .single();
 
@@ -287,7 +296,7 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      const cuentaActiva = business?.["Cuenta Activa"];
+      const estaCerrado = business?.is_manual_closed ?? false;
 
       return NextResponse.json({
         assistant: {
@@ -297,7 +306,7 @@ export async function POST(request: NextRequest) {
             estado_pedido: estadoPedido,
             detalles_pedido: detallesPedido,
             id_orden: idOrdenActiva,
-            cuenta_activa: cuentaActiva !== false ? "true" : "false"
+            cuenta_activa: !estaCerrado ? "true" : "false"
           },
           ...(business?.prompt_config && {
             model: {
