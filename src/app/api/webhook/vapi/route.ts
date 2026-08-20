@@ -27,6 +27,8 @@ export async function POST(request: NextRequest) {
         ? JSON.parse(toolCall.function.arguments)
         : toolCall?.function?.arguments || {};
 
+      const slugNegocio = args.business_slug || "tacos-luis";
+
       // A. HERRAMIENTA: cancelarPedido
       if (functionName === "cancelarPedido") {
         const { id_orden, motivo } = args;
@@ -57,8 +59,7 @@ export async function POST(request: NextRequest) {
         const rawPhone = message?.call?.customer?.number || args.cliente_telefono || "";
         const telefonoCliente = rawPhone.replace(/\D/g, "").slice(-10);
 
-        const { business_slug, cliente_nombre, tipo, direccion, items } = args;
-        const slugNegocio = business_slug || "tacos-luis";
+        const { cliente_nombre, tipo, direccion, items } = args;
 
         // Limpiar el nombre para que nunca se guarde literal como "nuevo"
         let nombreLimpio = cliente_nombre && cliente_nombre.toLowerCase() !== "nuevo" 
@@ -194,7 +195,7 @@ export async function POST(request: NextRequest) {
         const { data: menu } = await supabaseAdmin
           .from("catalog_items")
           .select("nombre, categoria, precio")
-          .eq("business_slug", args.business_slug || "tacos-luis")
+          .eq("business_slug", slugNegocio)
           .eq("disponible", true);
 
         return NextResponse.json({
@@ -207,13 +208,25 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      // D. HERRAMIENTA: verificar_estado_negocio
+      // D. HERRAMIENTA: verificar_estado_negocio (AHORA CONECTADO A SUPABASE)
       if (functionName === "verificar_estado_negocio") {
+        const { data: negocioInfo } = await supabaseAdmin
+          .from("businesses")
+          .select("is_manual_closed")
+          .eq("enlace del panel", slugNegocio)
+          .maybeSingle();
+
+        const estaCerradoManual = negocioInfo?.is_manual_closed === true;
+
+        const estadoRespuesta = estaCerradoManual
+          ? { estado: "cerrado", mensaje: "El negocio se encuentra cerrado temporalmente por disposición del establecimiento." }
+          : { estado: "abierto", mensaje: "El negocio está operando normalmente." };
+
         return NextResponse.json({
           results: [
             {
               toolCallId: toolCall.id,
-              result: JSON.stringify({ estado: "abierto", mensaje: "El negocio está operando normalmente." })
+              result: JSON.stringify(estadoRespuesta)
             }
           ]
         });
@@ -227,7 +240,7 @@ export async function POST(request: NextRequest) {
 
       const { data: business, error: businessError } = await supabaseAdmin
         .from("businesses")
-        .select("prompt_config")
+        .select("prompt_config, is_manual_closed")
         .eq("enlace del panel", "tacos-luis")
         .single();
 
@@ -284,7 +297,8 @@ export async function POST(request: NextRequest) {
             tiene_pedido_activo: esPedidoActivo,
             estado_pedido: estadoPedido,
             detalles_pedido: detallesPedido,
-            id_orden: idOrdenActiva
+            id_orden: idOrdenActiva,
+            negocio_cerrado_manual: business?.is_manual_closed ? "true" : "false"
           },
           ...(business?.prompt_config && {
             model: {
