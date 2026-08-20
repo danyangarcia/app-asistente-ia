@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js"; // Asegúrate de importar createClient si lo usas en otro archivo
+import { createClient } from "@supabase/supabase-js";
 
 export async function POST(request: NextRequest) {
   try {
@@ -51,91 +51,139 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      // B. HERRAMIENTA: crear_orden (CON PARCHE DE PRECIOS Y ANTIDUPLICADOS)
+      // B. HERRAMIENTA: crear_orden (ACTUALIZA SI EXISTE ORDEN ACTIVA, CREA SI NO)
       if (functionName === "crear_orden") {
         const callId = message?.call?.id;
+        const rawPhone = message?.call?.customer?.number || args.cliente_telefono || "";
+        const telefonoCliente = rawPhone.replace(/\D/g, "").slice(-10);
 
-        // 1. Candado Antiduplicados: Si esta llamada ya creó un pedido, lo bloqueamos
-        if (callId) {
-          const { data: ordenDuplicada } = await supabaseAdmin
-            .from("orders")
-            .select("id")
-            .eq("vapi_call_id", callId)
-            .maybeSingle();
-
-          if (ordenDuplicada) {
-            console.log("Intento de orden duplicada bloqueado para la llamada:", callId);
-            return NextResponse.json({
-              results: [{ toolCallId: toolCall.id, result: `El pedido ya fue registrado con éxito anteriormente. ID: ${ordenDuplicada.id}` }]
-            });
-          }
-        }
-
-        const { business_slug, cliente_nombre, cliente_telefono, tipo, direccion, items } = args;
+        const { business_slug, cliente_nombre, tipo, direccion, items } = args;
         const slugNegocio = business_slug || "tacos-luis";
 
-        // 2. Leer precios reales desde catalog_items de Supabase
+        // Limpiar el nombre para que nunca se guarde literal como "nuevo"
+        let nombreLimpio = cliente_nombre && cliente_nombre.toLowerCase() !== "nuevo" 
+          ? cliente_nombre 
+          : "Cliente en llamada";
+
+        // 1. Leer precios reales desde catalog_items de Supabase
         let totalCalculado = 0;
         const itemsProcesados = [];
 
         if (Array.isArray(items)) {
           for (const item of items) {
-            // Buscamos el precio real del producto en la base de datos por nombre
+            const nombreItem = item.nombre || item.name || "";
+            const cantidad = Number(item.cantidad || item.quantity || 1);
+
             const { data: productoBD } = await supabaseAdmin
               .from("catalog_items")
-              .select("price")
+              .select("price, nombre")
               .eq("business_slug", slugNegocio)
-              .ilike("nombre", `%${item.nombre || item.name || ""}%`)
+              .ilike("nombre", `%${nombreItem.trim()}%`)
               .maybeSingle();
 
-            // Si encuentra el producto usa su precio, si no, usa 0 para evitar fallos
-            const precioUnitario = productoBD?.price ? Number(productoBD.price) : 0;
-            const cantidad = Number(item.cantidad || item.quantity || 1);
-            const subtotal = precioUnitario * cantidad;
+            let precioUnitario = productoBD?.price ? Number(productoBD.price) : 0;
+            
+            // Fallback por si la IA pide refresco/soda general
+            if (precioUnitario === 0 && (nombreItem.toLowerCase().includes("pepsi") || nombreItem.toLowerCase().includes("soda") || nombreItem.toLowerCase().includes("refresco"))) {
+              const { data: prodSoda } = await supabaseAdmin
+                .from("catalog_items")
+                .select("price")
+                .eq("business_slug", slugNegocio)
+                .ilike("nombre", `%refresco%`)
+                .maybeSingle();
+              if (prodSoda?.price) precioUnitario = Number(prodSoda.price);
+            }
 
+            const subtotal = precioUnitario * cantidad;
             totalCalculado += subtotal;
 
             itemsProcesados.push({
-              nombre: item.nombre || item.name || "Taco",
+              nombre: productoBD?.nombre || nombreItem,
               cantidad: cantidad,
               precio: precioUnitario,
-              subtotal: subtotal
+              subtotal: subtotal,
+              notas: item.notas || ""
             });
           }
         }
 
         const totalLimpio = Math.round(totalCalculado * 100) / 100;
 
-        // 3. Guardar en la base de datos con los precios reales y el vapi_call_id
-        const { data: nuevaOrden, error: createError } = await supabaseAdmin
-          .from("orders")
-          .insert({
-            business_slug: slugNegocio,
-            cliente_nombre: cliente_nombre || "Cliente en llamada",
-            cliente_telefono: cliente_telefono || message?.call?.customer?.number || "",
-            tipo: tipo || "para_llevar",
-            direccion: direccion || "",
-            items: itemsProcesados,
-            total: totalLimpio,
-            estado: "pending",
-            origen: "Vapi Call",
-            vapi_call_id: callId || null // Guardamos el ID de la llamada como candado
-          })
-          .select("id")
-          .single();
+        // 2. BUSCAR SI EL CLIENTE YA TIENE UNA ORDEN ACTIVA/PENDIENTE
+        let ordenExistente = null;
+        if (telefonoCliente) {
+          const { data: encontrada } = await supabaseAdmin
+            .from("orders")
+            .select("id, items, total, estado")
+            .eq("business_slug", slugNegocio)
+            .ilike("cliente_telefono", `%${telefonoCliente}%`)
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
 
-        if (createError) {
-          console.error("Error guardando orden:", createError);
-          return NextResponse.json({
-            results: [{ toolCallId: toolCall.id, result: "Error interno al guardar la orden." }]
-          });
+          if (encontrada && encontrada.estado !== "cancelled" && encontrada.estado !== "completed" && encontrada.estado !== "entregado") {
+            ordenExistente = encontrada;
+          }
+        }
+
+        let idOrdenFinal;
+
+        if (ordenExistente) {
+          // SI YA TIENE ORDEN ACTIVA: Actualizamos sumando los nuevos items y recalculando el total
+          const itemsActualizados = [...(ordenExistente.items || []), ...itemsProcesados];
+          const nuevoTotalGeneral = Number(ordenExistente.total || 0) + totalLimpio;
+
+          const updateData: any = {
+            items: itemsActualizados,
+            total: nuevoTotalGeneral
+          };
+
+          if (nombreLimpio !== "Cliente en llamada") {
+            updateData.cliente_nombre = nombreLimpio;
+          }
+
+          await supabaseAdmin
+            .from("orders")
+            .update(updateData)
+            .eq("id", ordenExistente.id);
+
+          idOrdenFinal = ordenExistente.id;
+          console.log("Orden activa actualizada con éxito:", idOrdenFinal);
+        } else {
+          // SI NO TIENE ORDEN ACTIVA: Creamos una nueva
+          const { data: nuevaOrden, error: createError } = await supabaseAdmin
+            .from("orders")
+            .insert({
+              business_slug: slugNegocio,
+              cliente_nombre: nombreLimpio,
+              cliente_telefono: telefonoCliente || "No especificado",
+              tipo: tipo || "para_llevar",
+              direccion: direccion || "",
+              items: itemsProcesados,
+              total: totalLimpio,
+              estado: "pending",
+              origen: "Vapi Call",
+              vapi_call_id: callId || null
+            })
+            .select("id")
+            .single();
+
+          if (createError) {
+            console.error("Error guardando orden:", createError);
+            return NextResponse.json({
+              results: [{ toolCallId: toolCall.id, result: "Error interno al guardar la orden." }]
+            });
+          }
+
+          idOrdenFinal = nuevaOrden.id;
+          console.log("Nueva orden creada con éxito:", idOrdenFinal);
         }
 
         return NextResponse.json({
           results: [
             {
               toolCallId: toolCall.id,
-              result: `Orden creada exitosamente con ID: ${nuevaOrden.id}`
+              result: `Pedido procesado correctamente. ID de orden: ${idOrdenFinal}`
             }
           ]
         });
