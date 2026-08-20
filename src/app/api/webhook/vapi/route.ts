@@ -27,8 +27,6 @@ export async function POST(request: NextRequest) {
         ? JSON.parse(toolCall.function.arguments)
         : toolCall?.function?.arguments || {};
 
-      const slugNegocio = args.business_slug || "tacos-luis";
-
       // A. HERRAMIENTA: cancelarPedido
       if (functionName === "cancelarPedido") {
         const { id_orden, motivo } = args;
@@ -59,11 +57,12 @@ export async function POST(request: NextRequest) {
         const rawPhone = message?.call?.customer?.number || args.cliente_telefono || "";
         const telefonoCliente = rawPhone.replace(/\D/g, "").slice(-10);
 
-        const { cliente_nombre, tipo, direccion, items } = args;
+        const { business_slug, cliente_nombre, tipo, direccion, items } = args;
+        const slugNegocio = business_slug || "tacos-luis";
 
         // Limpiar el nombre para que nunca se guarde literal como "nuevo"
-        let nombreLimpio = cliente_nombre && cliente_nombre.toLowerCase() !== "nuevo" 
-          ? cliente_nombre 
+        let nombreLimpio = cliente_nombre && cliente_nombre.toLowerCase() !== "nuevo"
+          ? cliente_nombre
           : "Cliente en llamada";
 
         // 1. Leer precios reales desde catalog_items de Supabase
@@ -83,7 +82,7 @@ export async function POST(request: NextRequest) {
               .maybeSingle();
 
             let precioUnitario = productoBD?.price ? Number(productoBD.price) : 0;
-            
+           
             // Fallback por si la IA pide refresco/soda general
             if (precioUnitario === 0 && (nombreItem.toLowerCase().includes("pepsi") || nombreItem.toLowerCase().includes("soda") || nombreItem.toLowerCase().includes("refresco"))) {
               const { data: prodSoda } = await supabaseAdmin
@@ -195,7 +194,7 @@ export async function POST(request: NextRequest) {
         const { data: menu } = await supabaseAdmin
           .from("catalog_items")
           .select("nombre, categoria, precio")
-          .eq("business_slug", slugNegocio)
+          .eq("business_slug", args.business_slug || "tacos-luis")
           .eq("disponible", true);
 
         return NextResponse.json({
@@ -208,25 +207,13 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      // D. HERRAMIENTA: verificar_estado_negocio (AHORA CONECTADO A SUPABASE)
+      // D. HERRAMIENTA: verificar_estado_negocio
       if (functionName === "verificar_estado_negocio") {
-        const { data: negocioInfo } = await supabaseAdmin
-          .from("businesses")
-          .select("is_manual_closed")
-          .eq("enlace del panel", slugNegocio)
-          .maybeSingle();
-
-        const estaCerradoManual = negocioInfo?.is_manual_closed === true;
-
-        const estadoRespuesta = estaCerradoManual
-          ? { estado: "cerrado", mensaje: "El negocio se encuentra cerrado temporalmente por disposición del establecimiento." }
-          : { estado: "abierto", mensaje: "El negocio está operando normalmente." };
-
         return NextResponse.json({
           results: [
             {
               toolCallId: toolCall.id,
-              result: JSON.stringify(estadoRespuesta)
+              result: JSON.stringify({ estado: "abierto", mensaje: "El negocio está operando normalmente." })
             }
           ]
         });
@@ -238,13 +225,14 @@ export async function POST(request: NextRequest) {
       const rawPhone = message?.call?.customer?.number || "";
       const telefonoCliente = rawPhone.replace(/\D/g, "").slice(-10);
 
+      // Consultamos el prompt y el estado del cierre manual en la tabla businesses
       const { data: business, error: businessError } = await supabaseAdmin
         .from("businesses")
         .select("prompt_config, is_manual_closed")
         .eq("enlace del panel", "tacos-luis")
         .single();
 
-      if (businessError || !business?.prompt_config) {
+      if (businessError || !business) {
         console.error("Error al buscar negocio en Supabase:", businessError);
       }
 
@@ -298,7 +286,8 @@ export async function POST(request: NextRequest) {
             estado_pedido: estadoPedido,
             detalles_pedido: detallesPedido,
             id_orden: idOrdenActiva,
-            negocio_cerrado_manual: business?.is_manual_closed ? "true" : "false"
+            // Agregamos esta variable para que Vapi sepa si está cerrado manualmente por el botón
+            is_manual_closed: business?.is_manual_closed ? "true" : "false"
           },
           ...(business?.prompt_config && {
             model: {
