@@ -44,7 +44,6 @@ export default function BoardPage() {
   // Estado del tema dinámico
   const [themeMode, setThemeMode] = useState<'dark' | 'light'>('light')
 
-  // Detectar y escuchar cambios en localStorage
   useEffect(() => {
     setMounted(true)
 
@@ -55,10 +54,7 @@ export default function BoardPage() {
 
     checkTheme()
 
-    // Escuchar cambios entre pestañas o desde el layout
     window.addEventListener('storage', checkTheme)
-    
-    // Polling ligero para reaccionar al cambio inmediato desde el modal
     const interval = setInterval(checkTheme, 500)
 
     return () => {
@@ -69,25 +65,28 @@ export default function BoardPage() {
 
   const isDark = themeMode === 'dark'
 
-  // Paleta de estilos adaptativa
+  // Paleta de estilos adaptativa ajustada
   const styles = useMemo(() => ({
-    textPrimary: isDark ? '#ffffff' : '#0f172a',
-    textSecondary: isDark ? '#9ca3af' : '#475569',
+    textPrimary: isDark ? '#ffffff' : '#111827',
+    textSecondary: isDark ? '#9ca3af' : '#6b7280',
     cardBg: isDark ? '#111827' : '#ffffff',
-    cardBorder: isDark ? '#374151' : '#cbd5e1',
-    cardBorderCompleted: isDark ? '#1f2937' : '#e2e8f0',
-    innerBoxBg: isDark ? '#1f2937' : '#f1f5f9',
-    innerBoxText: isDark ? '#e5e7eb' : '#1e293b',
-    headerBorder: isDark ? '#1f2937' : '#cbd5e1',
+    cardBorder: isDark ? '#374151' : '#e5e7eb',
+    cardBorderCompleted: isDark ? '#1f2937' : '#e5e7eb',
+    innerBoxBg: isDark ? '#1f2937' : '#f8fafc',
+    innerBoxText: isDark ? '#e5e7eb' : '#1f2937',
+    headerBorder: isDark ? '#1f2937' : '#e5e7eb',
     modalBg: isDark ? '#111827' : '#ffffff',
-    modalBorder: isDark ? '#374151' : '#cbd5e1',
-    modalOverlay: isDark ? 'rgba(0, 0, 0, 0.85)' : 'rgba(15, 23, 42, 0.65)',
+    modalBorder: isDark ? '#374151' : '#e5e7eb',
+    modalOverlay: isDark ? 'rgba(0, 0, 0, 0.85)' : 'rgba(0, 0, 0, 0.5)',
     cardShadow: isDark 
-      ? '0 4px 6px -1px rgba(0, 0, 0, 0.5)' 
-      : '0 4px 12px rgba(15, 23, 42, 0.08)',
+      ? '0 10px 25px -5px rgba(0, 0, 0, 0.5)' 
+      : '0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.04)',
     inputBg: isDark ? '#111827' : '#ffffff',
-    inputBorder: isDark ? '#374151' : '#94a3b8',
-    priceColor: isDark ? '#34d399' : '#059669'
+    inputBorder: isDark ? '#374151' : '#d1d5db',
+    priceColor: isDark ? '#34d399' : '#059669',
+    btnNeutralBg: isDark ? '#374151' : '#e5e7eb',
+    btnNeutralText: isDark ? '#f3f4f6' : '#374151',
+    btnNeutralHover: isDark ? '#4b5563' : '#d1d5db'
   }), [isDark])
 
   useEffect(() => {
@@ -147,7 +146,6 @@ export default function BoardPage() {
     }
   }, [slug, supabase])
 
-  // Purgar pedidos antiguos
   useEffect(() => {
     const interval = setInterval(() => {
       const hace24Horas = Date.now() - 24 * 60 * 60 * 1000
@@ -196,10 +194,10 @@ export default function BoardPage() {
 
   const getTipoBadge = (tipo: string) => {
     switch (tipo?.toLowerCase()) {
-      case 'domicilio': return { label: '🏠 A Domicilio', bg: isDark ? '#1e3a8a' : '#dbeafe', color: isDark ? '#93c5fd' : '#1e40af' }
+      case 'domicilio': return { label: '🏠 A Domicilio', bg: isDark ? '#1e293b' : '#f3f4f6', color: isDark ? '#e2e8f0' : '#374151' }
       case 'comer_aqui': return { label: '🍽️ Para Comer Ahí', bg: isDark ? '#065f46' : '#d1fae5', color: isDark ? '#6ee7b7' : '#065f46' }
       case 'reserva': return { label: '📅 Reserva', bg: isDark ? '#78350f' : '#fef3c7', color: isDark ? '#fde68a' : '#92400e' }
-      default: return { label: '🛍️ Para Llevar', bg: isDark ? '#374151' : '#e2e8f0', color: isDark ? '#d1d5db' : '#334155' }
+      default: return { label: '🛍️ Para Llevar', bg: isDark ? '#374151' : '#e5e7eb', color: isDark ? '#f3f4f6' : '#374151' }
     }
   }
 
@@ -235,7 +233,7 @@ export default function BoardPage() {
       {loading ? (
         <div style={{ textAlign: 'center', padding: '3rem', color: styles.textSecondary }}>Cargando datos...</div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           <AnimatePresence>
             {orders.map((order) => {
               const badge = getTipoBadge(order.tipo)
@@ -250,7 +248,7 @@ export default function BoardPage() {
                   exit={{ opacity: 0 }}
                   style={{
                     background: styles.cardBg,
-                    border: '1px solid ' + (isCancelled ? '#ef4444' : isCompleted ? styles.cardBorderCompleted : styles.cardBorder),
+                    border: '1px solid ' + (isCancelled ? '#ef4444' : styles.cardBorder),
                     borderRadius: '0.75rem',
                     padding: '1.25rem',
                     boxShadow: styles.cardShadow,
@@ -262,7 +260,7 @@ export default function BoardPage() {
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                         <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', margin: 0, color: styles.textPrimary }}>{order.cliente_nombre || 'Cliente General'}</h3>
-                        <span style={{ background: badge.bg, color: badge.color, padding: '0.15rem 0.6rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 'bold' }}>
+                        <span style={{ background: badge.bg, color: badge.color, padding: '0.2rem 0.65rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: '600' }}>
                           {badge.label}
                         </span>
                       </div>
@@ -277,12 +275,12 @@ export default function BoardPage() {
                     </div>
                   </div>
 
-                  <div style={{ background: styles.innerBoxBg, padding: '0.75rem', borderRadius: '0.5rem', fontSize: '0.9rem', marginBottom: '1rem', transition: 'background 0.3s ease' }}>
+                  <div style={{ background: styles.innerBoxBg, padding: '0.75rem 1rem', borderRadius: '0.5rem', fontSize: '0.9rem', marginBottom: '1rem', border: `1px solid ${styles.cardBorder}`, transition: 'background 0.3s ease' }}>
                     {Array.isArray(order.items) && order.items.length > 0 ? (
                       order.items.map((prod: any, idx: number) => {
                         const subtotalItem = getItemPrice(prod, order.total || 0, order.items.length)
                         return (
-                          <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', color: styles.innerBoxText, padding: '0.15rem 0' }}>
+                          <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', color: styles.innerBoxText, padding: '0.25rem 0' }}>
                             <span>{prod.cantidad || 1}x {prod.taco || prod.nombre || 'Producto'} ({prod.tortilla || 'maíz'})</span>
                             <span style={{ color: subtotalItem > 0 ? styles.priceColor : styles.textSecondary, fontWeight: subtotalItem > 0 ? 'bold' : 'normal' }}>
                               ${subtotalItem}
@@ -332,14 +330,24 @@ export default function BoardPage() {
                     <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'space-between', alignItems: 'center' }}>
                       <button 
                         onClick={() => setSelectedOrder(order)}
-                        style={{ background: isDark ? '#374151' : '#e2e8f0', color: styles.textPrimary, border: `1px solid ${styles.cardBorder}`, padding: '0.4rem 0.8rem', borderRadius: '0.4rem', fontSize: '0.85rem', cursor: 'pointer', fontWeight: '600' }}>
+                        style={{ 
+                          background: styles.btnNeutralBg, 
+                          color: styles.btnNeutralText, 
+                          border: 'none', 
+                          padding: '0.45rem 0.85rem', 
+                          borderRadius: '0.4rem', 
+                          fontSize: '0.85rem', 
+                          cursor: 'pointer', 
+                          fontWeight: '600',
+                          transition: 'background 0.2s ease'
+                        }}>
                         🔍 Vista Completa
                       </button>
 
                       <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                         {!isCompleted && (
                           <button onClick={() => updateStatus(order.id, 'completed')}
-                            style={{ background: '#059669', color: '#fff', border: 'none', padding: '0.4rem 1rem', borderRadius: '0.4rem', fontSize: '0.85rem', fontWeight: 'bold', cursor: 'pointer' }}>
+                            style={{ background: '#059669', color: '#fff', border: 'none', padding: '0.45rem 1rem', borderRadius: '0.4rem', fontSize: '0.85rem', fontWeight: 'bold', cursor: 'pointer' }}>
                             ✔ Completar
                           </button>
                         )}
@@ -349,7 +357,7 @@ export default function BoardPage() {
                         )}
 
                         <button onClick={() => { setCancellingId(order.id); setRazon(''); }}
-                          style={{ background: 'transparent', border: '1px solid #dc2626', color: '#ef4444', padding: '0.4rem 0.8rem', borderRadius: '0.4rem', fontSize: '0.85rem', cursor: 'pointer', fontWeight: '600' }}>
+                          style={{ background: 'transparent', border: '1px solid #dc2626', color: '#ef4444', padding: '0.45rem 0.8rem', borderRadius: '0.4rem', fontSize: '0.85rem', cursor: 'pointer', fontWeight: '600' }}>
                           Cancelar ✕
                         </button>
                       </div>
@@ -383,8 +391,8 @@ export default function BoardPage() {
                 top: 0, left: 0, right: 0, bottom: 0,
                 width: '100vw', height: '100vh', 
                 backgroundColor: styles.modalOverlay, 
-                backdropFilter: 'blur(12px)', 
-                WebkitBackdropFilter: 'blur(12px)', 
+                backdropFilter: 'blur(8px)', 
+                WebkitBackdropFilter: 'blur(8px)', 
                 zIndex: 2147483647, 
                 display: 'flex', 
                 alignItems: 'center', 
@@ -408,7 +416,7 @@ export default function BoardPage() {
                   overflowY: 'auto',
                   padding: '1.5rem', 
                   color: styles.textPrimary, 
-                  boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)',
+                  boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
                   margin: 'auto'
                 }}>
                 
@@ -419,7 +427,7 @@ export default function BoardPage() {
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', fontSize: '0.88rem' }}>
                   
-                  <div style={{ background: styles.innerBoxBg, padding: '0.85rem', borderRadius: '0.5rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                  <div style={{ background: styles.innerBoxBg, padding: '0.85rem', borderRadius: '0.5rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', border: `1px solid ${styles.cardBorder}` }}>
                     <div>
                       <span style={{ fontSize: '0.75rem', color: styles.textSecondary, display: 'block' }}>Cliente</span>
                       <strong>{selectedOrder.cliente_nombre || 'Cliente General'}</strong>
@@ -430,7 +438,7 @@ export default function BoardPage() {
                     </div>
                     <div>
                       <span style={{ fontSize: '0.75rem', color: styles.textSecondary, display: 'block' }}>Tipo de Entrega</span>
-                      <strong style={{ textTransform: 'capitalize', color: isDark ? '#60a5fa' : '#2563eb' }}>{selectedOrder.tipo || 'Para Llevar'}</strong>
+                      <strong style={{ textTransform: 'capitalize', color: styles.textPrimary }}>{selectedOrder.tipo || 'Para Llevar'}</strong>
                     </div>
                     <div>
                       <span style={{ fontSize: '0.75rem', color: styles.textSecondary, display: 'block' }}>Hora de Registro</span>
@@ -438,14 +446,14 @@ export default function BoardPage() {
                     </div>
                   </div>
 
-                  <div style={{ background: styles.innerBoxBg, padding: '0.85rem', borderRadius: '0.5rem' }}>
-                    <span style={{ fontSize: '0.75rem', color: isDark ? '#60a5fa' : '#2563eb', fontWeight: 'bold', display: 'block', marginBottom: '0.25rem' }}>📍 DIRECCIÓN DE ENVÍO</span>
+                  <div style={{ background: styles.innerBoxBg, padding: '0.85rem', borderRadius: '0.5rem', border: `1px solid ${styles.cardBorder}` }}>
+                    <span style={{ fontSize: '0.75rem', color: styles.textSecondary, fontWeight: 'bold', display: 'block', marginBottom: '0.25rem' }}>📍 DIRECCIÓN DE ENVÍO</span>
                     <span style={{ fontSize: '0.9rem', color: styles.innerBoxText, fontWeight: '500' }}>
                       {selectedOrder.direccion || 'No aplica / Recoge en sucursal'}
                     </span>
                   </div>
 
-                  <div style={{ background: styles.innerBoxBg, padding: '0.85rem', borderRadius: '0.5rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                  <div style={{ background: styles.innerBoxBg, padding: '0.85rem', borderRadius: '0.5rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', border: `1px solid ${styles.cardBorder}` }}>
                     <div>
                       <span style={{ fontSize: '0.75rem', color: styles.textSecondary, display: 'block' }}>Referencias del Domicilio</span>
                       <span style={{ color: styles.innerBoxText }}>{selectedOrder.referencia_domicilio || selectedOrder.notas || 'Sin referencias'}</span>
@@ -457,13 +465,13 @@ export default function BoardPage() {
                   </div>
 
                   {selectedOrder.notas && (
-                    <div style={{ background: styles.innerBoxBg, padding: '0.85rem', borderRadius: '0.5rem' }}>
+                    <div style={{ background: styles.innerBoxBg, padding: '0.85rem', borderRadius: '0.5rem', border: `1px solid ${styles.cardBorder}` }}>
                       <span style={{ fontSize: '0.75rem', color: '#f59e0b', fontWeight: 'bold', display: 'block', marginBottom: '0.25rem' }}>📝 NOTAS Y OBSERVACIONES DE LA IA</span>
                       <span style={{ color: styles.innerBoxText }}>{selectedOrder.notas}</span>
                     </div>
                   )}
 
-                  <div style={{ background: styles.innerBoxBg, padding: '0.85rem', borderRadius: '0.5rem' }}>
+                  <div style={{ background: styles.innerBoxBg, padding: '0.85rem', borderRadius: '0.5rem', border: `1px solid ${styles.cardBorder}` }}>
                     <span style={{ fontSize: '0.75rem', color: styles.textSecondary, display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>DESGLOSE DE PRODUCTOS</span>
                     {Array.isArray(selectedOrder.items) && selectedOrder.items.length > 0 ? (
                       selectedOrder.items.map((prod: any, idx: number) => {
@@ -487,7 +495,7 @@ export default function BoardPage() {
                 </div>
 
                 <div style={{ marginTop: '1.25rem', textAlign: 'right' }}>
-                  <button onClick={() => setSelectedOrder(null)} style={{ background: isDark ? '#374151' : '#cbd5e1', color: styles.textPrimary, border: 'none', padding: '0.5rem 1.25rem', borderRadius: '0.4rem', cursor: 'pointer', fontWeight: 'bold' }}>
+                  <button onClick={() => setSelectedOrder(null)} style={{ background: styles.btnNeutralBg, color: styles.btnNeutralText, border: 'none', padding: '0.5rem 1.25rem', borderRadius: '0.4rem', cursor: 'pointer', fontWeight: 'bold' }}>
                     Cerrar
                   </button>
                 </div>

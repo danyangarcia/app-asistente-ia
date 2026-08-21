@@ -1,31 +1,63 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { createClient } from '@/lib/supabaseClient'
 import { usePathname, useRouter } from 'next/navigation'
+import { motion } from 'framer-motion'
+
+// Instanciación única del cliente fuera del ciclo de renders
+const supabase = createClient()
 
 export default function MetricsPage() {
   const pathname = usePathname()
   const router = useRouter()
-  const slug = pathname.split('/')[2]
-  const supabase = createClient()
+  
+  // Extracción limpia del slug
+  const slug = useMemo(() => pathname.split('/')[2] || '', [pathname])
 
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'hoy' | 'semana' | 'mes'>('hoy')
   const [allOrders, setAllOrders] = useState<any[]>([])
+  const [themeMode, setThemeMode] = useState<'dark' | 'light'>('light')
 
-  const [metrics, setMetrics] = useState({
-    totalVentas: 0,
-    cambioPorcentaje: 0,
-    solicitudesCount: 0,
-    ticketPromedio: 0,
-    vapiCount: 0,
-    whatsappCount: 0,
-    tiempoPromedio: '1 min 45 seg'
-  })
+  // Lectura del tema persistido
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('dashboard_theme') as 'dark' | 'light'
+    if (savedTheme) {
+      setThemeMode(savedTheme)
+    }
+
+    // Listener para sincronicidad en tiempo real si el tema cambia desde el DashboardLayout
+    const handleStorageChange = () => {
+      const currentTheme = localStorage.getItem('dashboard_theme') as 'dark' | 'light'
+      if (currentTheme) setThemeMode(currentTheme)
+    }
+
+    window.addEventListener('storage', handleStorageChange)
+    return () => window.removeEventListener('storage', handleStorageChange)
+  }, [])
+
+  // Propiedades visuales derivadas del tema (limpias de tonos azulados/plomizos)
+  const isDark = themeMode === 'dark'
+  const themeStyles = useMemo(() => ({
+    textColor: isDark ? '#FFFFFF' : '#0f172a',
+    subTextColor: isDark ? 'rgba(255,255,255,0.45)' : '#475569',
+    cardBg: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(255, 255, 255, 0.75)',
+    cardBorder: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(255, 255, 255, 0.9)',
+    cardShadow: isDark 
+      ? '0 8px 25px rgba(0,0,0,0.2)' 
+      : '0 4px 20px rgba(0, 0, 0, 0.04), inset 0 1px 0 rgba(255,255,255,1)',
+    progressBg: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+    activeTabBg: isDark ? 'rgba(255,255,255,0.12)' : '#ffffff',
+    activeTabShadow: isDark ? 'none' : '0 2px 6px rgba(0,0,0,0.06)',
+    primaryMetricColor: isDark ? '#34d399' : '#059669',
+    secondaryMetricColor: isDark ? '#60a5fa' : '#2563eb',
+  }), [isDark])
 
   useEffect(() => {
     if (!slug) return
+
+    let isMounted = true
 
     async function fetchOrders() {
       setLoading(true)
@@ -34,22 +66,24 @@ export default function MetricsPage() {
         .select('*')
         .eq('business_slug', slug)
 
-      if (data && !error) {
-        setAllOrders(data)
+      if (isMounted) {
+        if (data && !error) {
+          setAllOrders(data)
+        } else {
+          console.error('Error al cargar órdenes:', error)
+        }
+        setLoading(false)
       }
-      setLoading(false)
     }
 
     fetchOrders()
-  }, [slug, supabase])
 
-  useEffect(() => {
-    if (allOrders.length >= 0) {
-      calcularDatosTab(tab, allOrders)
+    return () => {
+      isMounted = false
     }
-  }, [tab, allOrders])
+  }, [slug])
 
-  const calcularDatosTab = (filtroTab: 'hoy' | 'semana' | 'mes', orders: any[]) => {
+  const calcularDatosTab = useCallback((filtroTab: 'hoy' | 'semana' | 'mes', orders: any[]) => {
     const ahora = new Date()
     const hoyStr = ahora.toISOString().split('T')[0]
 
@@ -110,7 +144,7 @@ export default function MetricsPage() {
     const vapiCount = currentPeriodOrders.filter(o => o.origen?.toLowerCase() === 'vapi').length
     const whatsappCount = currentPeriodOrders.filter(o => o.origen?.toLowerCase() === 'whatsapp').length
 
-    setMetrics({
+    return {
       totalVentas,
       cambioPorcentaje,
       solicitudesCount,
@@ -118,114 +152,281 @@ export default function MetricsPage() {
       vapiCount: vapiCount || Math.round(solicitudesCount * 0.6),
       whatsappCount: whatsappCount || (solicitudesCount - Math.round(solicitudesCount * 0.6)),
       tiempoPromedio: '1 min 45 seg'
-    })
-  }
+    }
+  }, [])
+
+  const metrics = useMemo(() => {
+    return calcularDatosTab(tab, allOrders)
+  }, [tab, allOrders, calcularDatosTab])
 
   return (
-    <div style={{ color: '#fff', maxWidth: '1200px', margin: '0 auto', padding: '2rem 1rem' }}>
+    <div style={{ 
+      color: themeStyles.textColor, 
+      maxWidth: '1200px', 
+      margin: '0 auto', 
+      padding: '1rem 0',
+      transition: 'color 0.3s ease'
+    }}>
       
+      {/* Encabezado Superior */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
         <div>
-          <span style={{ fontSize: '0.8rem', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '1px' }}>Tablero Operativo</span>
-          <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', margin: 0 }}>Métricas y Rendimiento</h2>
+          <span style={{ fontSize: '0.75rem', color: themeStyles.subTextColor, textTransform: 'uppercase', letterSpacing: '0.15em', fontWeight: 800 }}>
+            Tablero Operativo
+          </span>
+          <h2 style={{ fontSize: '1.75rem', fontWeight: 900, margin: '0.2rem 0 0 0', letterSpacing: '-0.02em' }}>
+            Métricas y Rendimiento
+          </h2>
         </div>
-        <button onClick={() => router.push(`/dashboard/${slug}/board`)}
-          style={{ background: '#111827', color: '#fff', border: '1px solid #374151', padding: '0.5rem 1rem', borderRadius: '0.5rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold' }}>
+        <motion.button 
+          whileHover={{ y: -2, scale: 1.02 }}
+          whileTap={{ scale: 0.97 }}
+          onClick={() => router.push(`/dashboard/${slug}/board`)}
+          style={{ 
+            background: themeStyles.cardBg, 
+            color: themeStyles.textColor, 
+            border: `1px solid ${themeStyles.cardBorder}`, 
+            padding: '0.7rem 1.4rem', 
+            borderRadius: '100px', 
+            cursor: 'pointer', 
+            fontSize: '0.78rem', 
+            fontWeight: 800,
+            letterSpacing: '0.05em',
+            backdropFilter: 'blur(10px)',
+            boxShadow: themeStyles.cardShadow,
+            transition: 'all 0.2s ease'
+          }}
+        >
           ← Volver al Tablero
-        </button>
+        </motion.button>
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
-        <p style={{ color: '#9ca3af', fontSize: '0.9rem', margin: 0 }}>Resumen operativo de la actividad atendida por tu IA</p>
+      {/* Selector de Periodo */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
+        <p style={{ color: themeStyles.subTextColor, fontSize: '0.88rem', margin: 0, fontWeight: 500 }}>
+          Resumen operativo de la actividad atendida por tu IA
+        </p>
         
-        <div style={{ background: '#111827', border: '1px solid #1f2937', padding: '0.3rem', borderRadius: '0.5rem', display: 'flex', gap: '0.3rem' }}>
-          <button onClick={() => setTab('hoy')}
-            style={{ background: tab === 'hoy' ? '#374151' : 'transparent', color: '#fff', border: 'none', padding: '0.4rem 1rem', borderRadius: '0.3rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: tab === 'hoy' ? 'bold' : 'normal' }}>
-            Hoy
-          </button>
-          <button onClick={() => setTab('semana')}
-            style={{ background: tab === 'semana' ? '#374151' : 'transparent', color: '#fff', border: 'none', padding: '0.4rem 1rem', borderRadius: '0.3rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: tab === 'semana' ? 'bold' : 'normal' }}>
-            Esta Semana
-          </button>
-          <button onClick={() => setTab('mes')}
-            style={{ background: tab === 'mes' ? '#374151' : 'transparent', color: '#fff', border: 'none', padding: '0.4rem 1rem', borderRadius: '0.3rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: tab === 'mes' ? 'bold' : 'normal' }}>
-            Este Mes
-          </button>
+        <div style={{ 
+          background: themeStyles.cardBg, 
+          border: `1px solid ${themeStyles.cardBorder}`, 
+          padding: '0.3rem', 
+          borderRadius: '100px', 
+          display: 'flex', 
+          gap: '0.3rem',
+          backdropFilter: 'blur(10px)',
+          boxShadow: themeStyles.cardShadow
+        }}>
+          {(['hoy', 'semana', 'mes'] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              style={{
+                background: tab === t ? themeStyles.activeTabBg : 'transparent',
+                color: tab === t ? themeStyles.textColor : themeStyles.subTextColor,
+                border: 'none',
+                padding: '0.5rem 1.2rem',
+                borderRadius: '100px',
+                cursor: 'pointer',
+                fontSize: '0.78rem',
+                fontWeight: tab === t ? 800 : 600,
+                boxShadow: tab === t ? themeStyles.activeTabShadow : 'none',
+                transition: 'all 0.2s ease',
+                textTransform: 'capitalize'
+              }}
+            >
+              {t === 'hoy' ? 'Hoy' : t === 'semana' ? 'Esta Semana' : 'Este Mes'}
+            </button>
+          ))}
         </div>
       </div>
 
       {loading ? (
-        <div style={{ textAlign: 'center', padding: '4rem', color: '#9ca3af' }}>Cargando métricas...</div>
+        <div style={{ 
+          textAlign: 'center', 
+          padding: '5rem 2rem', 
+          color: themeStyles.subTextColor,
+          background: themeStyles.cardBg,
+          border: `1px solid ${themeStyles.cardBorder}`,
+          borderRadius: '20px',
+          backdropFilter: 'blur(10px)'
+        }}>
+          Cargando métricas...
+        </div>
       ) : (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+          {/* Tarjetas Principales de KPIs */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.25rem', marginBottom: '1.5rem' }}>
             
-            <div style={{ background: '#111827', border: '1px solid #1f2937', borderRadius: '0.75rem', padding: '1.5rem' }}>
-              <span style={{ fontSize: '0.85rem', color: '#9ca3af', fontWeight: 'bold' }}>Ventas Totales</span>
-              <div style={{ fontSize: '2.2rem', fontWeight: 'bold', color: '#34d399', margin: '0.5rem 0' }}>
+            {/* Ventas Totales */}
+            <motion.div 
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, delay: 0.05 }}
+              style={{ 
+                background: themeStyles.cardBg, 
+                border: `1px solid ${themeStyles.cardBorder}`, 
+                borderRadius: '20px', 
+                padding: '1.8rem',
+                backdropFilter: 'blur(10px)',
+                boxShadow: themeStyles.cardShadow
+              }}
+            >
+              <span style={{ fontSize: '0.8rem', color: themeStyles.subTextColor, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Ventas Totales
+              </span>
+              <div style={{ fontSize: '2.4rem', fontWeight: 900, color: themeStyles.primaryMetricColor, margin: '0.4rem 0' }}>
                 ${metrics.totalVentas.toLocaleString()}
               </div>
-              <div style={{ fontSize: '0.8rem', color: metrics.cambioPorcentaje >= 0 ? '#34d399' : '#f87171' }}>
+              <div style={{ 
+                fontSize: '0.8rem', 
+                fontWeight: 700,
+                color: metrics.cambioPorcentaje >= 0 ? themeStyles.primaryMetricColor : (isDark ? '#f87171' : '#dc2626') 
+              }}>
                 {metrics.cambioPorcentaje >= 0 ? '↑ +' : '↓ '}{metrics.cambioPorcentaje}% vs periodo anterior
               </div>
-            </div>
+            </motion.div>
 
-            <div style={{ background: '#111827', border: '1px solid #1f2937', borderRadius: '0.75rem', padding: '1.5rem' }}>
-              <span style={{ fontSize: '0.85rem', color: '#9ca3af', fontWeight: 'bold' }}>Solicitudes Atendidas</span>
-              <div style={{ fontSize: '2.2rem', fontWeight: 'bold', color: '#fff', margin: '0.5rem 0' }}>
+            {/* Solicitudes Atendidas */}
+            <motion.div 
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, delay: 0.1 }}
+              style={{ 
+                background: themeStyles.cardBg, 
+                border: `1px solid ${themeStyles.cardBorder}`, 
+                borderRadius: '20px', 
+                padding: '1.8rem',
+                backdropFilter: 'blur(10px)',
+                boxShadow: themeStyles.cardShadow
+              }}
+            >
+              <span style={{ fontSize: '0.8rem', color: themeStyles.subTextColor, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Solicitudes Atendidas
+              </span>
+              <div style={{ fontSize: '2.4rem', fontWeight: 900, color: themeStyles.textColor, margin: '0.4rem 0' }}>
                 {metrics.solicitudesCount}
               </div>
-              <div style={{ fontSize: '0.8rem', color: '#9ca3af' }}>
+              <div style={{ fontSize: '0.8rem', color: themeStyles.subTextColor, fontWeight: 500 }}>
                 Pedidos y servicios cerrados
               </div>
-            </div>
+            </motion.div>
 
-            <div style={{ background: '#111827', border: '1px solid #1f2937', borderRadius: '0.75rem', padding: '1.5rem' }}>
-              <span style={{ fontSize: '0.85rem', color: '#9ca3af', fontWeight: 'bold' }}>Ticket Promedio</span>
-              <div style={{ fontSize: '2.2rem', fontWeight: 'bold', color: '#60a5fa', margin: '0.5rem 0' }}>
-                ${metrics.ticketPromedio}
+            {/* Ticket Promedio */}
+            <motion.div 
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, delay: 0.15 }}
+              style={{ 
+                background: themeStyles.cardBg, 
+                border: `1px solid ${themeStyles.cardBorder}`, 
+                borderRadius: '20px', 
+                padding: '1.8rem',
+                backdropFilter: 'blur(10px)',
+                boxShadow: themeStyles.cardShadow
+              }}
+            >
+              <span style={{ fontSize: '0.8rem', color: themeStyles.subTextColor, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Ticket Promedio
+              </span>
+              <div style={{ fontSize: '2.4rem', fontWeight: 900, color: themeStyles.secondaryMetricColor, margin: '0.4rem 0' }}>
+                ${metrics.ticketPromedio.toLocaleString()}
               </div>
-              <div style={{ fontSize: '0.8rem', color: '#9ca3af' }}>
+              <div style={{ fontSize: '0.8rem', color: themeStyles.subTextColor, fontWeight: 500 }}>
                 Valor medio por orden
               </div>
-            </div>
+            </motion.div>
 
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: '1rem' }}>
+          {/* Paneles Informativos */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '1.25rem' }}>
             
-            <div style={{ background: '#111827', border: '1px solid #1f2937', borderRadius: '0.75rem', padding: '1.5rem' }}>
-              <h3 style={{ fontSize: '1rem', fontWeight: 'bold', margin: '0 0 1.2rem 0' }}>Canales de Entrada de la IA</h3>
+            {/* Canales de Entrada */}
+            <motion.div 
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, delay: 0.2 }}
+              style={{ 
+                background: themeStyles.cardBg, 
+                border: `1px solid ${themeStyles.cardBorder}`, 
+                borderRadius: '20px', 
+                padding: '1.8rem',
+                backdropFilter: 'blur(10px)',
+                boxShadow: themeStyles.cardShadow
+              }}
+            >
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 800, margin: '0 0 1.5rem 0', letterSpacing: '-0.01em' }}>
+                Canales de Entrada de la IA
+              </h3>
               
-              <div style={{ marginBottom: '1rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '0.4rem' }}>
-                  <span style={{ color: '#d1d5db' }}>📞 Llamadas de Voz</span>
-                  <span style={{ color: '#60a5fa', fontWeight: 'bold' }}>{metrics.vapiCount} atenciones</span>
+              {/* Llamadas de Voz */}
+              <div style={{ marginBottom: '1.25rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '0.5rem' }}>
+                  <span style={{ color: themeStyles.textColor, fontWeight: 600 }}>📞 Llamadas de Voz</span>
+                  <span style={{ color: themeStyles.secondaryMetricColor, fontWeight: 800 }}>{metrics.vapiCount} atenciones</span>
                 </div>
-                <div style={{ width: '100%', background: '#1f2937', height: '6px', borderRadius: '999px', overflow: 'hidden' }}>
-                  <div style={{ width: `${metrics.solicitudesCount > 0 ? (metrics.vapiCount / metrics.solicitudesCount) * 100 : 0}%`, background: '#3b82f6', height: '100%' }}></div>
+                <div style={{ width: '100%', background: themeStyles.progressBg, height: '8px', borderRadius: '999px', overflow: 'hidden' }}>
+                  <div style={{ 
+                    width: `${metrics.solicitudesCount > 0 ? (metrics.vapiCount / metrics.solicitudesCount) * 100 : 0}%`, 
+                    background: themeStyles.secondaryMetricColor, 
+                    height: '100%',
+                    borderRadius: '999px',
+                    transition: 'width 0.5s ease'
+                  }}></div>
                 </div>
               </div>
 
+              {/* Mensajes de WhatsApp */}
               <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '0.4rem' }}>
-                  <span style={{ color: '#d1d5db' }}>💬 Mensajes de WhatsApp</span>
-                  <span style={{ color: '#34d399', fontWeight: 'bold' }}>{metrics.whatsappCount} atenciones</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '0.5rem' }}>
+                  <span style={{ color: themeStyles.textColor, fontWeight: 600 }}>💬 Mensajes de WhatsApp</span>
+                  <span style={{ color: themeStyles.primaryMetricColor, fontWeight: 800 }}>{metrics.whatsappCount} atenciones</span>
                 </div>
-                <div style={{ width: '100%', background: '#1f2937', height: '6px', borderRadius: '999px', overflow: 'hidden' }}>
-                  <div style={{ width: `${metrics.solicitudesCount > 0 ? (metrics.whatsappCount / metrics.solicitudesCount) * 100 : 0}%`, background: '#10b981', height: '100%' }}></div>
+                <div style={{ width: '100%', background: themeStyles.progressBg, height: '8px', borderRadius: '999px', overflow: 'hidden' }}>
+                  <div style={{ 
+                    width: `${metrics.solicitudesCount > 0 ? (metrics.whatsappCount / metrics.solicitudesCount) * 100 : 0}%`, 
+                    background: themeStyles.primaryMetricColor, 
+                    height: '100%',
+                    borderRadius: '999px',
+                    transition: 'width 0.5s ease'
+                  }}></div>
                 </div>
               </div>
-            </div>
+            </motion.div>
 
-            <div style={{ background: '#111827', border: '1px solid #1f2937', borderRadius: '0.75rem', padding: '1.5rem' }}>
-              <h3 style={{ fontSize: '1rem', fontWeight: 'bold', margin: '0 0 1.2rem 0' }}>Eficiencia del Asistente IA</h3>
+            {/* Eficiencia del Asistente */}
+            <motion.div 
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, delay: 0.25 }}
+              style={{ 
+                background: themeStyles.cardBg, 
+                border: `1px solid ${themeStyles.cardBorder}`, 
+                borderRadius: '20px', 
+                padding: '1.8rem',
+                backdropFilter: 'blur(10px)',
+                boxShadow: themeStyles.cardShadow
+              }}
+            >
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 800, margin: '0 0 1.5rem 0', letterSpacing: '-0.01em' }}>
+                Eficiencia del Asistente IA
+              </h3>
               
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0', fontSize: '0.85rem' }}>
-                <span style={{ color: '#9ca3af' }}>Tiempo promedio de atención:</span>
-                <span style={{ color: '#fff', fontWeight: 'bold' }}>{metrics.tiempoPromedio}</span>
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center', 
+                padding: '1rem', 
+                borderRadius: '12px',
+                background: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)',
+                border: `1px solid ${themeStyles.cardBorder}`,
+                fontSize: '0.88rem' 
+              }}>
+                <span style={{ color: themeStyles.subTextColor, fontWeight: 500 }}>Tiempo promedio de atención:</span>
+                <span style={{ color: themeStyles.textColor, fontWeight: 800 }}>{metrics.tiempoPromedio}</span>
               </div>
-            </div>
+            </motion.div>
 
           </div>
         </>

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { createClient } from '@/lib/supabaseClient'
@@ -29,10 +29,46 @@ export default function CatalogPage() {
   const [formData, setFormData] = useState({ nombre: '', categoria: '', precio: '' as number | '' })
   
   const [mounted, setMounted] = useState(false)
+  const [themeMode, setThemeMode] = useState<'dark' | 'light'>('light')
 
   useEffect(() => {
     setMounted(true)
   }, [])
+
+  // Lectura del tema persistido
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('dashboard_theme') as 'dark' | 'light'
+    if (savedTheme) {
+      setThemeMode(savedTheme)
+    }
+
+    const handleStorageChange = () => {
+      const currentTheme = localStorage.getItem('dashboard_theme') as 'dark' | 'light'
+      if (currentTheme) setThemeMode(currentTheme)
+    }
+
+    window.addEventListener('storage', handleStorageChange)
+    return () => window.removeEventListener('storage', handleStorageChange)
+  }, [])
+
+  // Estilos adaptables según el tema activo
+  const isDark = themeMode === 'dark'
+  const themeStyles = useMemo(() => ({
+    textColor: isDark ? '#FFFFFF' : '#0f172a',
+    subTextColor: isDark ? '#9ca3af' : '#64748b',
+    cardBg: isDark ? '#111827' : 'rgba(255, 255, 255, 0.85)',
+    cardBorder: isDark ? '#1f2937' : '#e2e8f0',
+    headerBg: isDark ? '#1f2937' : '#f1f5f9',
+    headerTextColor: isDark ? '#9ca3af' : '#475569',
+    inputBg: isDark ? '#111827' : '#ffffff',
+    inputBorder: isDark ? '#374151' : '#cbd5e1',
+    modalBg: isDark ? '#111827' : '#ffffff',
+    modalInputBg: isDark ? '#1f2937' : '#f8fafc',
+    modalOverlay: isDark ? 'rgba(0, 0, 0, 0.85)' : 'rgba(15, 23, 42, 0.65)',
+    cardShadow: isDark 
+      ? '0 10px 30px rgba(0,0,0,0.3)' 
+      : '0 4px 20px rgba(0, 0, 0, 0.05), inset 0 1px 0 rgba(255,255,255,1)',
+  }), [isDark])
 
   // 1. Cargar el negocio y sus productos reales desde Supabase
   useEffect(() => {
@@ -163,12 +199,12 @@ export default function CatalogPage() {
   )
 
   return (
-    <div style={{ color: '#fff', maxWidth: '1000px', margin: '0 auto' }}>
+    <div style={{ color: themeStyles.textColor, maxWidth: '1000px', margin: '0 auto', transition: 'color 0.3s ease' }}>
       
       <header style={{ marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', margin: 0 }}>Catálogo y Precios</h2>
-          <p style={{ color: '#9ca3af', fontSize: '0.9rem', marginTop: '0.25rem' }}>
+          <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', margin: 0, color: themeStyles.textColor }}>Catálogo y Precios</h2>
+          <p style={{ color: themeStyles.subTextColor, fontSize: '0.9rem', marginTop: '0.25rem' }}>
             Adaptado automáticamente para: <strong style={{ color: '#3b82f6', textTransform: 'capitalize' }}>{tipoNegocio}</strong>
           </p>
         </div>
@@ -187,13 +223,40 @@ export default function CatalogPage() {
           placeholder="Buscar producto o servicio..." 
           value={busqueda}
           onChange={(e) => setBusqueda(e.target.value)}
-          style={{ width: '100%', padding: '0.8rem 1rem', borderRadius: '0.5rem', border: '1px solid #374151', background: '#111827', color: '#fff', outline: 'none' }}
+          style={{ 
+            width: '100%', 
+            padding: '0.8rem 1rem', 
+            borderRadius: '0.5rem', 
+            border: `1px solid ${themeStyles.inputBorder}`, 
+            background: themeStyles.inputBg, 
+            color: themeStyles.textColor, 
+            outline: 'none',
+            boxSizing: 'border-box',
+            transition: 'all 0.3s ease'
+          }}
         />
       </div>
 
-      <div style={{ background: '#111827', border: '1px solid #1f2937', borderRadius: '0.75rem', overflow: 'hidden' }}>
+      <div style={{ 
+        background: themeStyles.cardBg, 
+        border: `1px solid ${themeStyles.cardBorder}`, 
+        borderRadius: '0.75rem', 
+        overflow: 'hidden',
+        boxShadow: themeStyles.cardShadow,
+        transition: 'all 0.3s ease'
+      }}>
         
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1.5fr', padding: '1rem', background: '#1f2937', color: '#9ca3af', fontSize: '0.85rem', fontWeight: 'bold', textTransform: 'uppercase' }}>
+        <div style={{ 
+          display: 'grid', 
+          gridTemplateColumns: '2fr 1fr 1fr 1.5fr', 
+          padding: '1rem', 
+          background: themeStyles.headerBg, 
+          color: themeStyles.headerTextColor, 
+          fontSize: '0.85rem', 
+          fontWeight: 'bold', 
+          textTransform: 'uppercase',
+          transition: 'all 0.3s ease'
+        }}>
           <span>Nombre</span>
           <span>Categoría</span>
           <span>Precio</span>
@@ -202,14 +265,21 @@ export default function CatalogPage() {
 
         <div>
           {loading ? (
-            <div style={{ padding: '2rem', textAlign: 'center', color: '#9ca3af' }}>Cargando catálogo desde la base de datos...</div>
+            <div style={{ padding: '2rem', textAlign: 'center', color: themeStyles.subTextColor }}>Cargando catálogo desde la base de datos...</div>
           ) : (
             itemsFiltrados.map((item) => (
               <motion.div key={item.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1.5fr', padding: '1rem', borderBottom: '1px solid #1f2937', alignItems: 'center' }}>
+                style={{ 
+                  display: 'grid', 
+                  gridTemplateColumns: '2fr 1fr 1fr 1.5fr', 
+                  padding: '1rem', 
+                  borderBottom: `1px solid ${themeStyles.cardBorder}`, 
+                  alignItems: 'center',
+                  transition: 'border-color 0.3s ease'
+                }}>
                 
-                <span style={{ fontWeight: '600', fontSize: '0.95rem' }}>{item.nombre}</span>
-                <span style={{ color: '#9ca3af', fontSize: '0.9rem' }}>{item.categoria}</span>
+                <span style={{ fontWeight: '600', fontSize: '0.95rem', color: themeStyles.textColor }}>{item.nombre}</span>
+                <span style={{ color: themeStyles.subTextColor, fontSize: '0.9rem' }}>{item.categoria}</span>
                 <span style={{ color: '#10b981', fontWeight: '600' }}>${item.precio}</span>
                 
                 <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '1rem' }}>
@@ -219,8 +289,26 @@ export default function CatalogPage() {
                   </button>
                   
                   <button onClick={() => toggleDisponibilidad(item.id, item.disponible)}
-                    style={{ width: '40px', height: '22px', borderRadius: '11px', border: 'none', cursor: 'pointer', background: item.disponible ? '#10b981' : '#4b5563', position: 'relative' }}>
-                    <div style={{ width: '18px', height: '18px', borderRadius: '50%', background: '#fff', position: 'absolute', top: '2px', left: item.disponible ? '20px' : '2px', transition: 'left 0.3s' }} />
+                    style={{ 
+                      width: '40px', 
+                      height: '22px', 
+                      borderRadius: '11px', 
+                      border: 'none', 
+                      cursor: 'pointer', 
+                      background: item.disponible ? '#10b981' : (isDark ? '#4b5563' : '#cbd5e1'), 
+                      position: 'relative',
+                      transition: 'background 0.3s ease'
+                    }}>
+                    <div style={{ 
+                      width: '18px', 
+                      height: '18px', 
+                      borderRadius: '50%', 
+                      background: '#fff', 
+                      position: 'absolute', 
+                      top: '2px', 
+                      left: item.disponible ? '20px' : '2px', 
+                      transition: 'left 0.3s' 
+                    }} />
                   </button>
                 </div>
               </motion.div>
@@ -228,7 +316,7 @@ export default function CatalogPage() {
           )}
 
           {!loading && itemsFiltrados.length === 0 && (
-            <div style={{ padding: '2rem', textAlign: 'center', color: '#9ca3af' }}>
+            <div style={{ padding: '2rem', textAlign: 'center', color: themeStyles.subTextColor }}>
               No hay artículos registrados todavía. ¡Agrega el primero!
             </div>
           )}
@@ -252,7 +340,7 @@ export default function CatalogPage() {
                 bottom: 0, 
                 width: '100vw', 
                 height: '100vh', 
-                backgroundColor: 'rgba(0, 0, 0, 0.85)', 
+                backgroundColor: themeStyles.modalOverlay, 
                 backdropFilter: 'blur(16px)', 
                 WebkitBackdropFilter: 'blur(16px)', 
                 zIndex: 2147483647, 
@@ -269,32 +357,51 @@ export default function CatalogPage() {
                 exit={{ scale: 0.95, opacity: 0 }}
                 onClick={(e) => e.stopPropagation()}
                 style={{ 
-                  background: '#111827', 
+                  background: themeStyles.modalBg, 
                   padding: '2rem', 
                   borderRadius: '1rem', 
                   width: '100%', 
                   maxWidth: '420px', 
-                  border: '1px solid #374151',
-                  color: '#fff',
-                  boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.95)',
-                  margin: 'auto'
+                  border: `1px solid ${themeStyles.cardBorder}`,
+                  color: themeStyles.textColor,
+                  boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.4)',
+                  margin: 'auto',
+                  transition: 'background 0.3s ease, color 0.3s ease'
                 }}>
                 
-                <h3 style={{ margin: '0 0 1.5rem 0', fontSize: '1.25rem', fontWeight: 'bold' }}>
+                <h3 style={{ margin: '0 0 1.5rem 0', fontSize: '1.25rem', fontWeight: 'bold', color: themeStyles.textColor }}>
                   {editingId ? 'Editar Artículo' : 'Nuevo Artículo'}
                 </h3>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem' }}>
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.85rem', color: '#9ca3af', marginBottom: '0.3rem' }}>Nombre</label>
+                    <label style={{ display: 'block', fontSize: '0.85rem', color: themeStyles.subTextColor, marginBottom: '0.3rem' }}>Nombre</label>
                     <input type="text" value={formData.nombre} onChange={e => setFormData({...formData, nombre: e.target.value})}
-                      style={{ width: '100%', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid #374151', background: '#1f2937', color: '#fff', outline: 'none', boxSizing: 'border-box' }} />
+                      style={{ 
+                        width: '100%', 
+                        padding: '0.75rem', 
+                        borderRadius: '0.5rem', 
+                        border: `1px solid ${themeStyles.inputBorder}`, 
+                        background: themeStyles.modalInputBg, 
+                        color: themeStyles.textColor, 
+                        outline: 'none', 
+                        boxSizing: 'border-box' 
+                      }} />
                   </div>
 
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.85rem', color: '#9ca3af', marginBottom: '0.3rem' }}>Categoría</label>
+                    <label style={{ display: 'block', fontSize: '0.85rem', color: themeStyles.subTextColor, marginBottom: '0.3rem' }}>Categoría</label>
                     <select value={formData.categoria} onChange={e => setFormData({...formData, categoria: e.target.value})}
-                      style={{ width: '100%', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid #374151', background: '#1f2937', color: '#fff', outline: 'none', boxSizing: 'border-box' }}>
+                      style={{ 
+                        width: '100%', 
+                        padding: '0.75rem', 
+                        borderRadius: '0.5rem', 
+                        border: `1px solid ${themeStyles.inputBorder}`, 
+                        background: themeStyles.modalInputBg, 
+                        color: themeStyles.textColor, 
+                        outline: 'none', 
+                        boxSizing: 'border-box' 
+                      }}>
                       {categoriasPermitidas.map((cat) => (
                         <option key={cat} value={cat}>{cat}</option>
                       ))}
@@ -302,20 +409,36 @@ export default function CatalogPage() {
                   </div>
 
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.85rem', color: '#9ca3af', marginBottom: '0.3rem' }}>Precio ($)</label>
+                    <label style={{ display: 'block', fontSize: '0.85rem', color: themeStyles.subTextColor, marginBottom: '0.3rem' }}>Precio ($)</label>
                     <input 
                       type="number" 
                       value={formData.precio} 
                       placeholder="Ej. 150"
                       onChange={e => setFormData({...formData, precio: e.target.value === '' ? '' : Number(e.target.value)})}
-                      style={{ width: '100%', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid #374151', background: '#1f2937', color: '#fff', outline: 'none', boxSizing: 'border-box' }} 
+                      style={{ 
+                        width: '100%', 
+                        padding: '0.75rem', 
+                        borderRadius: '0.5rem', 
+                        border: `1px solid ${themeStyles.inputBorder}`, 
+                        background: themeStyles.modalInputBg, 
+                        color: themeStyles.textColor, 
+                        outline: 'none', 
+                        boxSizing: 'border-box' 
+                      }} 
                     />
                   </div>
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
                   <button onClick={() => setIsModalOpen(false)}
-                    style={{ background: 'transparent', color: '#9ca3af', border: '1px solid #374151', padding: '0.6rem 1rem', borderRadius: '0.5rem', cursor: 'pointer' }}>
+                    style={{ 
+                      background: 'transparent', 
+                      color: themeStyles.subTextColor, 
+                      border: `1px solid ${themeStyles.inputBorder}`, 
+                      padding: '0.6rem 1rem', 
+                      borderRadius: '0.5rem', 
+                      cursor: 'pointer' 
+                    }}>
                     Cancelar
                   </button>
                   <button onClick={handleSave}

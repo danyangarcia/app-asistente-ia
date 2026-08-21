@@ -44,20 +44,27 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     })
   }, [])
 
-  // Propiedades derivadas del tema con contraste marcado para el Modo Claro
+  // Propiedades derivadas del tema optimizadas para el Modo Claro
   const isDark = themeMode === 'dark'
   const themeStyles = useMemo(() => ({
-    bgColor: isDark ? '#080808' : '#e2e8f0', // Fondo gris slate nítido en light
-    textColor: isDark ? '#FFFFFF' : '#0f172a', // Texto principal oscuro e intenso
-    subTextColor: isDark ? 'rgba(255,255,255,0.45)' : '#475569', // Texto secundario gris plomo de alta legibilidad
-    cardBg: isDark ? 'rgba(255,255,255,0.03)' : '#cbd5e1', // Botones en un gris mate con contraste real
-    cardBorder: isDark ? 'rgba(255,255,255,0.07)' : '#94a3b8', // Borde definido gris acero
+    bgColor: isDark ? '#080808' : '#e2e8f0', 
+    textColor: isDark ? '#FFFFFF' : '#0f172a', 
+    subTextColor: isDark ? 'rgba(255,255,255,0.45)' : '#475569', 
+    
+    // Blanco translúcido para el efecto cristal en claro
+    cardBg: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(255, 255, 255, 0.75)', 
+    
+    // Borde fino blanco brillante para delimitar en claro
+    cardBorder: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(255, 255, 255, 0.9)', 
+    
+    // Sombras suaves de elevación natural
     buttonShadow: isDark 
       ? '0 8px 25px rgba(0,0,0,0.2)' 
-      : '0 4px 12px rgba(15, 23, 42, 0.08), inset 0 1px 0 rgba(255,255,255,0.6)', // Sombras de profundidad real
+      : '0 4px 15px rgba(0, 0, 0, 0.04), inset 0 1px 0 rgba(255,255,255,1)', 
     buttonHoverShadow: isDark 
       ? '0 12px 30px rgba(0,0,0,0.35)' 
-      : '0 8px 20px rgba(15, 23, 42, 0.15), inset 0 1px 0 rgba(255,255,255,0.8)',
+      : '0 8px 22px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255,255,255,1)', 
+      
     modalBg: isDark ? '#121216' : '#f8fafc',
     modalBorder: isDark ? 'rgba(255,255,255,0.1)' : '#cbd5e1',
   }), [isDark])
@@ -236,7 +243,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             whileTap={{ y: 1, scale: 0.97 }}
             onClick={() => navigate(config.leftPath, 'left')}
             style={{
-              background: hovering === 'leftBtn' && !isDark ? '#cbd5e1' : themeStyles.cardBg,
+              background: hovering === 'leftBtn' && !isDark ? '#FFFFFF' : themeStyles.cardBg,
               border: `1px solid ${themeStyles.cardBorder}`,
               borderRadius: '100px', 
               padding: '0.9rem 2.5rem', 
@@ -302,7 +309,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             whileTap={{ y: 1, scale: 0.97 }}
             onClick={() => navigate(rightPath, 'right')}
             style={{
-              background: hovering === 'rightBtn' && !isDark ? '#cbd5e1' : themeStyles.cardBg,
+              background: hovering === 'rightBtn' && !isDark ? '#FFFFFF' : themeStyles.cardBg,
               border: `1px solid ${themeStyles.cardBorder}`,
               borderRadius: '100px', 
               padding: '0.9rem 2.5rem', 
@@ -342,7 +349,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           whileTap={{ scale: 0.95 }}
           onClick={() => setShowSettingsModal(true)}
           style={{
-            background: isDark ? 'rgba(20, 20, 25, 0.85)' : '#cbd5e1',
+            background: isDark ? 'rgba(20, 20, 25, 0.85)' : 'rgba(255, 255, 255, 0.85)',
             border: `1px solid ${themeStyles.cardBorder}`,
             borderRadius: '50%',
             width: '48px',
@@ -352,7 +359,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             justifyContent: 'center',
             color: themeStyles.textColor,
             cursor: 'pointer',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.12)'
+            backdropFilter: 'blur(10px)',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.08)'
           }}
           title="Configuración del Negocio"
         >
@@ -382,7 +390,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             exit={{ opacity: 0 }}
             style={{
               position: 'fixed', inset: 0, zIndex: 100,
-              background: isDark ? 'rgba(0,0,0,0.8)' : 'rgba(15, 23, 42, 0.35)', backdropFilter: 'blur(6px)',
+              background: isDark ? 'rgba(0,0,0,0.8)' : 'rgba(15, 23, 42, 0.25)', backdropFilter: 'blur(6px)',
               display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem'
             }}
           >
@@ -422,7 +430,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
               {/* Estado de la Cuenta */}
               <div style={{
-                background: isDark ? 'rgba(255,255,255,0.03)' : '#e2e8f0',
+                background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(255, 255, 255, 0.6)',
                 border: `1px solid ${themeStyles.cardBorder}`,
                 borderRadius: '12px',
                 padding: '1rem',
@@ -459,7 +467,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
               {/* Aspecto Visual */}
               <div style={{
-                background: isDark ? 'rgba(255,255,255,0.03)' : '#e2e8f0',
+                background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(255, 255, 255, 0.6)',
                 border: `1px solid ${themeStyles.cardBorder}`,
                 borderRadius: '12px',
                 padding: '1rem',
@@ -500,7 +508,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   padding: '0.75rem',
                   borderRadius: '10px',
                   border: 'none',
-                  background: isDark ? 'rgba(255,255,255,0.08)' : '#cbd5e1',
+                  background: isDark ? 'rgba(255,255,255,0.08)' : '#e2e8f0',
                   color: themeStyles.textColor,
                   fontSize: '0.8rem',
                   fontWeight: 600,
