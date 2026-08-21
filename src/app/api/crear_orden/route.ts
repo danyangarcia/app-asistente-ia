@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
     let toolCallId = null;
     let args: any = {};
 
-    // Extraer argumentos enviado por Vapi
+    // Extraer argumentos enviados por Vapi
     if (body.message?.toolCalls && body.message.toolCalls.length > 0) {
       toolCallId = body.message.toolCalls[0].id;
       args = body.message.toolCalls[0].function?.arguments || {};
@@ -47,8 +47,9 @@ export async function POST(request: NextRequest) {
     const {
       business_slug,
       cliente_nombre,
-      cliente_telefono,
+      cliente_telefono: argTelefono,
       tipo,
+      tipo_entrega,
       direccion,
       hora,
       items,
@@ -63,7 +64,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 1. Validar confirmación explícita
+    // Extraer teléfono real: si viene literal {{call.customer.number}} o no viene, busca en body.message.call
+    let telefonoFinal = argTelefono;
+    if (!telefonoFinal || telefonoFinal === "{{call.customer.number}}") {
+      telefonoFinal = body.message?.call?.customer?.number || "No especificado";
+    }
+
+    // Normalizar el tipo de entrega (acepta 'tipo' o 'tipo_entrega')
+    const tipoFinal = tipo_entrega || tipo || "Para Llevar";
+
+    // 1. Validar confirmación explícita (si la herramienta envía el campo)
     if (confirmado === false || confirmado === "no") {
       const respNo = { exito: false, mensaje: "Pedido no confirmado por el cliente. No se guardó nada." };
       return NextResponse.json(
@@ -79,7 +89,7 @@ export async function POST(request: NextRequest) {
       .from("orders")
       .select("id")
       .eq("business_slug", business_slug)
-      .eq("cliente_telefono", cliente_telefono || "")
+      .eq("cliente_telefono", telefonoFinal)
       .gte("created_at", haceDosMinutos);
 
     if (ordenesRecientes && ordenesRecientes.length > 0) {
@@ -97,9 +107,9 @@ export async function POST(request: NextRequest) {
         {
           business_slug: business_slug,
           cliente_nombre: cliente_nombre || "Cliente en llamada",
-          cliente_telefono: cliente_telefono || "No especificado",
-          tipo: tipo || "para llevar",
-          direccion: direccion || null,
+          cliente_telefono: telefonoFinal,
+          tipo: tipoFinal,
+          direccion: tipoFinal === "A Domicilio" ? (direccion || null) : null,
           hora: hora || null,
           items: items || [],
           total: total || 0,
