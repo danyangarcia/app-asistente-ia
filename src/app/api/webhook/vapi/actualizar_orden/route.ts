@@ -12,7 +12,6 @@ export async function POST(req: Request) {
     const toolCall = body.message.toolCalls[0];
     const { business_slug, cliente_telefono, items, total } = toolCall.function.arguments;
 
-    // Actualiza la orden pendiente más reciente para ese cliente y negocio
     const { data, error } = await supabase
       .from('orders')
       .update({ 
