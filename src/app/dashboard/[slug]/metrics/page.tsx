@@ -173,6 +173,11 @@ export default function MetricsPage() {
     return calcularDatosTab(tab, allOrders)
   }, [tab, allOrders, calcularDatosTab])
 
+  // Variables para la barra de consumo de IA
+  const totalMinutesPlan = vapiMetrics?.metrics?.balances?.included ?? 200
+  const usedMinutes = vapiMetrics?.metrics?.usedMinutes ?? 3
+  const percentageUsed = totalMinutesPlan > 0 ? Math.min(100, Math.max(0, (usedMinutes / totalMinutesPlan) * 100)) : 0
+
   return (
     <div style={{ 
       color: themeStyles.textColor, 
@@ -320,7 +325,7 @@ export default function MetricsPage() {
                 {vapiMetrics?.metrics?.totalAvailableMinutes ?? 0} min
               </div>
               <div style={{ fontSize: '0.8rem', color: themeStyles.subTextColor, fontWeight: 500 }}>
-                Consumidos: {vapiMetrics?.metrics?.usedMinutes ?? 0} min este periodo
+                Consumidos: {usedMinutes} min este periodo
               </div>
             </motion.div>
 
@@ -438,7 +443,7 @@ export default function MetricsPage() {
 
           </div>
 
-          {/* Tabla de Historial Vapi */}
+          {/* Barra de Progreso y Renovación del Plan IA */}
           <motion.div
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
@@ -452,57 +457,40 @@ export default function MetricsPage() {
               boxShadow: themeStyles.cardShadow
             }}
           >
-            <h3 style={{ fontSize: '1.05rem', fontWeight: 800, margin: '0 0 1.25rem 0', letterSpacing: '-0.01em' }}>
-              Últimas Llamadas Atendidas por Vapi
-            </h3>
-
-            {!vapiMetrics?.recentCalls?.length ? (
-              <p style={{ color: themeStyles.subTextColor, fontSize: '0.88rem', margin: 0 }}>No hay llamadas registradas en este periodo.</p>
-            ) : (
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
-                  <thead>
-                    <tr style={{ borderBottom: `1px solid ${themeStyles.cardBorder}`, color: themeStyles.subTextColor }}>
-                      <th style={{ padding: '0.75rem 0.5rem', fontWeight: 700 }}>ID LLAMADA</th>
-                      <th style={{ padding: '0.75rem 0.5rem', fontWeight: 700 }}>DURACIÓN</th>
-                      <th style={{ padding: '0.75rem 0.5rem', fontWeight: 700 }}>MINUTOS COBRADOS</th>
-                      <th style={{ padding: '0.75rem 0.5rem', fontWeight: 700 }}>ESTADO</th>
-                      <th style={{ padding: '0.75rem 0.5rem', fontWeight: 700 }}>FECHA</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {vapiMetrics.recentCalls.map((call: any) => (
-                      <tr key={call.id} style={{ borderBottom: `1px solid ${themeStyles.cardBorder}` }}>
-                        <td style={{ padding: '0.75rem 0.5rem', fontWeight: 600, fontFamily: 'monospace' }}>
-                          {call.vapi_call_id ? `${call.vapi_call_id.slice(0, 8)}...` : 'N/A'}
-                        </td>
-                        <td style={{ padding: '0.75rem 0.5rem' }}>
-                          {call.duration_seconds ?? 0} seg
-                        </td>
-                        <td style={{ padding: '0.75rem 0.5rem', fontWeight: 700, color: themeStyles.secondaryMetricColor }}>
-                          {call.duration_minutes ?? 0} min
-                        </td>
-                        <td style={{ padding: '0.75rem 0.5rem' }}>
-                          <span style={{ 
-                            background: isDark ? 'rgba(52, 211, 153, 0.15)' : '#d1fae5', 
-                            color: themeStyles.primaryMetricColor, 
-                            padding: '0.2rem 0.6rem', 
-                            borderRadius: '100px', 
-                            fontSize: '0.75rem', 
-                            fontWeight: 700 
-                          }}>
-                            {call.status}
-                          </span>
-                        </td>
-                        <td style={{ padding: '0.75rem 0.5rem', color: themeStyles.subTextColor }}>
-                          {call.created_at ? new Date(call.created_at).toLocaleString() : '-'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem', marginBottom: '1.2rem', flexWrap: 'wrap' }}>
+              <div>
+                <h3 style={{ fontSize: '1.05rem', fontWeight: 800, margin: '0 0 0.2rem 0', letterSpacing: '-0.01em' }}>
+                  Consumo General del Plan IA
+                </h3>
+                <p style={{ fontSize: '0.8rem', color: themeStyles.subTextColor, margin: 0, fontWeight: 500 }}>
+                  Próxima renovación de pago el <span style={{ color: themeStyles.textColor, fontWeight: 700 }}>01 de Septiembre, 2026</span>
+                </p>
               </div>
-            )}
+              <div style={{ textAlign: 'right' }}>
+                <span style={{ fontSize: '0.88rem', color: themeStyles.textColor, fontWeight: 700 }}>
+                  {usedMinutes} min usados <span style={{ color: themeStyles.subTextColor, fontWeight: 500 }}>/ {totalMinutesPlan} min</span>
+                </span>
+              </div>
+            </div>
+
+            {/* Barra Visual (0% a 100%) */}
+            <div style={{ width: '100%', background: themeStyles.progressBg, height: '12px', borderRadius: '999px', overflow: 'hidden', padding: '2px', border: `1px solid ${themeStyles.cardBorder}` }}>
+              <div style={{ 
+                width: `${percentageUsed}%`, 
+                background: percentageUsed > 85 ? '#ef4444' : themeStyles.primaryMetricColor, 
+                height: '100%',
+                borderRadius: '999px',
+                transition: 'width 0.6s ease'
+              }}></div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.6rem', fontSize: '0.75rem', color: themeStyles.subTextColor, fontWeight: 600 }}>
+              <span>0%</span>
+              <span style={{ color: themeStyles.textColor, fontWeight: 700 }}>
+                {percentageUsed.toFixed(1)}% consumido
+              </span>
+              <span>100%</span>
+            </div>
           </motion.div>
         </>
       )}
