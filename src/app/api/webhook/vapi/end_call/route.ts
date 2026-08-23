@@ -18,8 +18,13 @@ export async function POST(req: Request) {
 
     const { call, durationSeconds } = message;
     const vapiCallId = call?.id;
+
+    // Obtener slug/ID desde metadata de la llamada O directamente de los query params de la URL
+    const url = new URL(req.url);
+    const urlSlug = url.searchParams.get('business_slug');
+
     const businessId = call?.metadata?.business_id;
-    const businessSlug = call?.metadata?.business_slug;
+    const businessSlug = call?.metadata?.business_slug || urlSlug;
 
     if (!vapiCallId) {
       return NextResponse.json({ error: 'Falta vapi_call_id' }, { status: 400 });
