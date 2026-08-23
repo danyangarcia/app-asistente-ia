@@ -10,8 +10,12 @@ const supabase = createClient()
 export default function MetricsPage() {
   const pathname = usePathname()
   const router = useRouter()
-  
-  const slug = useMemo(() => pathname.split('/')[2] || '', [pathname])
+
+  // Extrae el slug de manera más limpia ignorando slashes iniciales/finales
+  const slug = useMemo(() => {
+    const segments = pathname.split('/').filter(Boolean)
+    return segments[1] || '' // Ajustar índice según la estructura de rutas (/dashboard/[slug]/metrics)
+  }, [pathname])
 
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'hoy' | 'semana' | 'mes'>('hoy')
@@ -19,11 +23,10 @@ export default function MetricsPage() {
   const [vapiMetrics, setVapiMetrics] = useState<any>(null)
   const [themeMode, setThemeMode] = useState<'dark' | 'light'>('light')
 
+  // Listener para sync de tema visual
   useEffect(() => {
     const savedTheme = localStorage.getItem('dashboard_theme') as 'dark' | 'light'
-    if (savedTheme) {
-      setThemeMode(savedTheme)
-    }
+    if (savedTheme) setThemeMode(savedTheme)
 
     const handleStorageChange = () => {
       const currentTheme = localStorage.getItem('dashboard_theme') as 'dark' | 'light'
@@ -35,6 +38,7 @@ export default function MetricsPage() {
   }, [])
 
   const isDark = themeMode === 'dark'
+  
   const themeStyles = useMemo(() => ({
     textColor: isDark ? '#FFFFFF' : '#0f172a',
     subTextColor: isDark ? 'rgba(255,255,255,0.45)' : '#475569',
@@ -50,58 +54,64 @@ export default function MetricsPage() {
     secondaryMetricColor: isDark ? '#60a5fa' : '#2563eb',
   }), [isDark])
 
+  // Obtención de datos con AbortController para llamadas asíncronas
   useEffect(() => {
     if (!slug) return
 
-    let isMounted = true
+    const controller = new AbortController()
 
     async function fetchData() {
       setLoading(true)
 
-      // 1. Obtener Órdenes
-      const { data: ordersData } = await supabase
-        .from('orders')
-        .select('*')
-        .eq('business_slug', slug)
-
-      // 2. Obtener Métricas de Vapi desde el Endpoint
       try {
-        const res = await fetch(`/api/metrics?business_slug=${slug}`)
-        if (res.ok) {
-          const metricsData = await res.json()
-          if (isMounted) setVapiMetrics(metricsData)
-        }
-      } catch (err) {
-        console.error('Error al obtener métricas de Vapi:', err)
-      }
+        const [{ data: ordersData }, resMetrics] = await Promise.all([
+          supabase.from('orders').select('*').eq('business_slug', slug),
+          fetch(`/api/metrics?business_slug=${slug}`, { signal: controller.signal })
+        ])
 
-      if (isMounted) {
         if (ordersData) setAllOrders(ordersData)
-        setLoading(false)
+
+        if (resMetrics.ok) {
+          const metricsData = await resMetrics.json()
+          setVapiMetrics(metricsData)
+        }
+      } catch (err: any) {
+        if (err.name !== 'AbortError') {
+          console.error('Error al cargar datos:', err)
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setLoading(false)
+        }
       }
     }
 
     fetchData()
 
     return () => {
-      isMounted = false
+      controller.abort()
     }
   }, [slug])
 
+  // Cálculo de métricas locales evitando desfase de zona horaria
   const calcularDatosTab = useCallback((filtroTab: 'hoy' | 'semana' | 'mes', orders: any[]) => {
     const ahora = new Date()
-    const hoyStr = ahora.toISOString().split('T')[0]
+    
+    // Comparación por fechas sin desfase UTC
+    const esMismoDia = (d1: Date, d2: Date) => 
+      d1.getFullYear() === d2.getFullYear() &&
+      d1.getMonth() === d2.getMonth() &&
+      d1.getDate() === d2.getDate()
 
     let currentPeriodOrders: any[] = []
     let previousPeriodOrders: any[] = []
 
     if (filtroTab === 'hoy') {
-      const ayerDate = new Date(ahora)
-      ayerDate.setDate(ayerDate.getDate() - 1)
-      const ayerStr = ayerDate.toISOString().split('T')[0]
+      const ayer = new Date(ahora)
+      ayer.setDate(ayer.getDate() - 1)
 
-      currentPeriodOrders = orders.filter(o => o.created_at?.startsWith(hoyStr) && o.estado !== 'cancelled')
-      previousPeriodOrders = orders.filter(o => o.created_at?.startsWith(ayerStr) && o.estado !== 'cancelled')
+      currentPeriodOrders = orders.filter(o => esMismoDia(new Date(o.created_at), ahora) && o.estado !== 'cancelled')
+      previousPeriodOrders = orders.filter(o => esMismoDia(new Date(o.created_at), ayer) && o.estado !== 'cancelled')
 
     } else if (filtroTab === 'semana') {
       const hace7Dias = new Date(ahora)
@@ -154,9 +164,8 @@ export default function MetricsPage() {
       cambioPorcentaje,
       solicitudesCount,
       ticketPromedio,
-      vapiCount: vapiCount || Math.round(solicitudesCount * 0.6),
-      whatsappCount: whatsappCount || (solicitudesCount - Math.round(solicitudesCount * 0.6)),
-      tiempoPromedio: '1 min 45 seg'
+      vapiCount,
+      whatsappCount,
     }
   }, [])
 
@@ -173,7 +182,7 @@ export default function MetricsPage() {
       transition: 'color 0.3s ease'
     }}>
       
-      {/* Encabezado Superior */}
+      {/* Encabezado */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
         <div>
           <span style={{ fontSize: '0.75rem', color: themeStyles.subTextColor, textTransform: 'uppercase', letterSpacing: '0.15em', fontWeight: 800 }}>
@@ -206,7 +215,7 @@ export default function MetricsPage() {
         </motion.button>
       </div>
 
-      {/* Selector de Periodo */}
+      {/* Selector de Filtros */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
         <p style={{ color: themeStyles.subTextColor, fontSize: '0.88rem', margin: 0, fontWeight: 500 }}>
           Resumen operativo y consumo de minutos IA
@@ -260,10 +269,9 @@ export default function MetricsPage() {
         </div>
       ) : (
         <>
-          {/* Tarjetas Principales de KPIs */}
+          {/* Tarjetas KPI */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.25rem', marginBottom: '1.5rem' }}>
             
-            {/* Ventas Totales */}
             <motion.div 
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
@@ -292,7 +300,6 @@ export default function MetricsPage() {
               </div>
             </motion.div>
 
-            {/* Minutos IA Disponibles */}
             <motion.div 
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
@@ -317,7 +324,6 @@ export default function MetricsPage() {
               </div>
             </motion.div>
 
-            {/* Solicitudes Atendidas */}
             <motion.div 
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
@@ -347,7 +353,6 @@ export default function MetricsPage() {
           {/* Paneles Informativos */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '1.25rem', marginBottom: '1.5rem' }}>
             
-            {/* Canales de Entrada */}
             <motion.div 
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
@@ -398,7 +403,6 @@ export default function MetricsPage() {
               </div>
             </motion.div>
 
-            {/* Desglose de Saldos de Minutos */}
             <motion.div 
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
@@ -434,7 +438,7 @@ export default function MetricsPage() {
 
           </div>
 
-          {/* Historial Reciente de Llamadas Vapi */}
+          {/* Tabla de Historial Vapi */}
           <motion.div
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
@@ -452,7 +456,7 @@ export default function MetricsPage() {
               Últimas Llamadas Atendidas por Vapi
             </h3>
 
-            {vapiMetrics?.recentCalls?.length === 0 ? (
+            {!vapiMetrics?.recentCalls?.length ? (
               <p style={{ color: themeStyles.subTextColor, fontSize: '0.88rem', margin: 0 }}>No hay llamadas registradas en este periodo.</p>
             ) : (
               <div style={{ overflowX: 'auto' }}>
@@ -467,16 +471,16 @@ export default function MetricsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {vapiMetrics?.recentCalls?.map((call: any) => (
+                    {vapiMetrics.recentCalls.map((call: any) => (
                       <tr key={call.id} style={{ borderBottom: `1px solid ${themeStyles.cardBorder}` }}>
                         <td style={{ padding: '0.75rem 0.5rem', fontWeight: 600, fontFamily: 'monospace' }}>
-                          {call.vapi_call_id?.slice(0, 8)}...
+                          {call.vapi_call_id ? `${call.vapi_call_id.slice(0, 8)}...` : 'N/A'}
                         </td>
                         <td style={{ padding: '0.75rem 0.5rem' }}>
-                          {call.duration_seconds} seg
+                          {call.duration_seconds ?? 0} seg
                         </td>
                         <td style={{ padding: '0.75rem 0.5rem', fontWeight: 700, color: themeStyles.secondaryMetricColor }}>
-                          {call.duration_minutes} min
+                          {call.duration_minutes ?? 0} min
                         </td>
                         <td style={{ padding: '0.75rem 0.5rem' }}>
                           <span style={{ 
@@ -491,7 +495,7 @@ export default function MetricsPage() {
                           </span>
                         </td>
                         <td style={{ padding: '0.75rem 0.5rem', color: themeStyles.subTextColor }}>
-                          {new Date(call.created_at).toLocaleString()}
+                          {call.created_at ? new Date(call.created_at).toLocaleString() : '-'}
                         </td>
                       </tr>
                     ))}
