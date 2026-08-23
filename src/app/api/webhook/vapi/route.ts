@@ -337,12 +337,12 @@ export async function POST(request: NextRequest) {
         .maybeSingle();
 
       if (business?.id && minutesToDeduct > 0) {
-        // Registrar llamada
+        // Registrar llamada con las columnas exactas de Supabase
         await supabaseAdmin.from("vapi_calls_log").insert({
           business_id: business.id,
-          call_id: call?.id,
+          vapi_call_id: call?.id,
           duration_seconds: durationSeconds,
-          minutes_charged: minutesToDeduct,
+          duration_minutes: minutesToDeduct,
           status: call?.endedReason || "completed"
         });
 
