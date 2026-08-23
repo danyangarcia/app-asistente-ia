@@ -51,21 +51,19 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      // B. HERRAMIENTA: crear_orden (ACTUALIZA SI EXISTE ORDEN ACTIVA, CREA SI NO)
+      // B. HERRAMIENTA: crear_orden
       if (functionName === "crear_orden") {
         const callId = message?.call?.id;
         const rawPhone = message?.call?.customer?.number || args.cliente_telefono || "";
         const telefonoCliente = rawPhone.replace(/\D/g, "").slice(-10);
 
         const { business_slug, cliente_nombre, tipo, direccion, items } = args;
-        const slugNegocio = business_slug || "tacos-luis";
+        const slugNegocio = business_slug || message?.call?.assistant?.metadata?.business_slug || "tacos-luis";
 
-        // Limpiar el nombre para que nunca se guarde literal como "nuevo"
         let nombreLimpio = cliente_nombre && cliente_nombre.toLowerCase() !== "nuevo"
           ? cliente_nombre
           : "Cliente en llamada";
 
-        // 1. Leer precios reales desde catalog_items de Supabase
         let totalCalculado = 0;
         const itemsProcesados = [];
 
@@ -83,7 +81,6 @@ export async function POST(request: NextRequest) {
 
             let precioUnitario = productoBD?.price ? Number(productoBD.price) : 0;
            
-            // Fallback por si la IA pide refresco/soda general
             if (precioUnitario === 0 && (nombreItem.toLowerCase().includes("pepsi") || nombreItem.toLowerCase().includes("soda") || nombreItem.toLowerCase().includes("refresco"))) {
               const { data: prodSoda } = await supabaseAdmin
                 .from("catalog_items")
@@ -109,7 +106,6 @@ export async function POST(request: NextRequest) {
 
         const totalLimpio = Math.round(totalCalculado * 100) / 100;
 
-        // 2. BUSCAR SI EL CLIENTE YA TIENE UNA ORDEN ACTIVA/PENDIENTE
         let ordenExistente = null;
         if (telefonoCliente) {
           const { data: encontrada } = await supabaseAdmin
@@ -129,7 +125,6 @@ export async function POST(request: NextRequest) {
         let idOrdenFinal;
 
         if (ordenExistente) {
-          // SI YA TIENE ORDEN ACTIVA: Actualizamos sumando los nuevos items y recalculando el total
           const itemsActualizados = [...(ordenExistente.items || []), ...itemsProcesados];
           const nuevoTotalGeneral = Number(ordenExistente.total || 0) + totalLimpio;
 
@@ -148,9 +143,7 @@ export async function POST(request: NextRequest) {
             .eq("id", ordenExistente.id);
 
           idOrdenFinal = ordenExistente.id;
-          console.log("Orden activa actualizada con éxito:", idOrdenFinal);
         } else {
-          // SI NO TIENE ORDEN ACTIVA: Creamos una nueva
           const { data: nuevaOrden, error: createError } = await supabaseAdmin
             .from("orders")
             .insert({
@@ -176,7 +169,6 @@ export async function POST(request: NextRequest) {
           }
 
           idOrdenFinal = nuevaOrden.id;
-          console.log("Nueva orden creada con éxito:", idOrdenFinal);
         }
 
         return NextResponse.json({
@@ -191,10 +183,11 @@ export async function POST(request: NextRequest) {
 
       // C. HERRAMIENTA: consultar_menu_supbase
       if (functionName === "consultar_menu_supbase") {
+        const targetSlug = args.business_slug || message?.call?.assistant?.metadata?.business_slug || "tacos-luis";
         const { data: menu } = await supabaseAdmin
           .from("catalog_items")
           .select("nombre, categoria, precio")
-          .eq("business_slug", args.business_slug || "tacos-luis")
+          .eq("business_slug", targetSlug)
           .eq("disponible", true);
 
         return NextResponse.json({
@@ -209,10 +202,11 @@ export async function POST(request: NextRequest) {
 
       // D. HERRAMIENTA: verificar_estado_negocio
       if (functionName === "verificar_estado_negocio") {
+        const targetSlug = args.business_slug || message?.call?.assistant?.metadata?.business_slug || "tacos-luis";
         const { data: bizStatus } = await supabaseAdmin
           .from("businesses")
           .select("is_manual_closed")
-          .eq("enlace del panel", "tacos-luis")
+          .eq('"enlace del panel"', targetSlug)
           .maybeSingle();
 
         const estaCerradoManual = bizStatus?.is_manual_closed;
@@ -244,11 +238,13 @@ export async function POST(request: NextRequest) {
       const rawPhone = message?.call?.customer?.number || "";
       const telefonoCliente = rawPhone.replace(/\D/g, "").slice(-10);
 
+      const targetSlug = message?.call?.assistant?.metadata?.business_slug || "tacos-luis";
+
       const { data: business, error: businessError } = await supabaseAdmin
         .from("businesses")
         .select("prompt_config, is_manual_closed")
-        .eq("enlace del panel", "tacos-luis")
-        .single();
+        .eq('"enlace del panel"', targetSlug)
+        .maybeSingle();
 
       if (businessError || !business) {
         console.error("Error al buscar negocio en Supabase:", businessError);
@@ -321,6 +317,57 @@ export async function POST(request: NextRequest) {
         },
         success: true
       });
+    }
+
+    // 3. FIN DE LLAMADA: PROCESAMIENTO Y DEDUCCIÓN EXACTA DE MINUTOS (end-of-call-report)
+    if (eventType === "end-of-call-report") {
+      const call = message?.call;
+      const durationSeconds = Number(call?.endedAt ? (new Date(call.endedAt).getTime() - new Date(call.startedAt).getTime()) / 1000 : call?.durationSeconds || 0);
+
+      // CÁLCULO EXACTO EN DECIMALES: 16.3 seg -> 0.27 min
+      const minutesToDeduct = Number((durationSeconds / 60).toFixed(2));
+
+      const targetSlug = call?.assistant?.metadata?.business_slug || "tacos-luis";
+
+      // Obtener el ID del negocio
+      const { data: business } = await supabaseAdmin
+        .from("businesses")
+        .select("id")
+        .eq('"enlace del panel"', targetSlug)
+        .maybeSingle();
+
+      if (business?.id && minutesToDeduct > 0) {
+        // Registrar llamada
+        await supabaseAdmin.from("vapi_calls_log").insert({
+          business_id: business.id,
+          call_id: call?.id,
+          duration_seconds: durationSeconds,
+          minutes_charged: minutesToDeduct,
+          status: call?.endedReason || "completed"
+        });
+
+        // Buscar periodo activo
+        const { data: period } = await supabaseAdmin
+          .from("billing_periods")
+          .select("id")
+          .eq("business_id", business.id)
+          .eq("is_active", true)
+          .maybeSingle();
+
+        if (period?.id) {
+          // Descontar saldo exacto en el Ledger
+          await supabaseAdmin.from("usage_ledger").insert({
+            business_id: business.id,
+            billing_period_id: period.id,
+            type: "CALL_USAGE",
+            credit_type: "INCLUDED",
+            amount: -minutesToDeduct,
+            description: `Llamada Vapi ID: ${call?.id}`
+          });
+        }
+      }
+
+      return NextResponse.json({ success: true });
     }
 
     return NextResponse.json({ success: true }, { status: 200 });
