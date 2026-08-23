@@ -5,29 +5,26 @@ import { createClient } from '@/lib/supabaseClient'
 import { usePathname, useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 
-// Instanciación única del cliente fuera del ciclo de renders
 const supabase = createClient()
 
 export default function MetricsPage() {
   const pathname = usePathname()
   const router = useRouter()
   
-  // Extracción limpia del slug
   const slug = useMemo(() => pathname.split('/')[2] || '', [pathname])
 
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'hoy' | 'semana' | 'mes'>('hoy')
   const [allOrders, setAllOrders] = useState<any[]>([])
+  const [vapiMetrics, setVapiMetrics] = useState<any>(null)
   const [themeMode, setThemeMode] = useState<'dark' | 'light'>('light')
 
-  // Lectura del tema persistido
   useEffect(() => {
     const savedTheme = localStorage.getItem('dashboard_theme') as 'dark' | 'light'
     if (savedTheme) {
       setThemeMode(savedTheme)
     }
 
-    // Listener para sincronicidad en tiempo real si el tema cambia desde el DashboardLayout
     const handleStorageChange = () => {
       const currentTheme = localStorage.getItem('dashboard_theme') as 'dark' | 'light'
       if (currentTheme) setThemeMode(currentTheme)
@@ -37,7 +34,6 @@ export default function MetricsPage() {
     return () => window.removeEventListener('storage', handleStorageChange)
   }, [])
 
-  // Propiedades visuales derivadas del tema (limpias de tonos azulados/plomizos)
   const isDark = themeMode === 'dark'
   const themeStyles = useMemo(() => ({
     textColor: isDark ? '#FFFFFF' : '#0f172a',
@@ -59,24 +55,33 @@ export default function MetricsPage() {
 
     let isMounted = true
 
-    async function fetchOrders() {
+    async function fetchData() {
       setLoading(true)
-      const { data, error } = await supabase
+
+      // 1. Obtener Órdenes
+      const { data: ordersData } = await supabase
         .from('orders')
         .select('*')
         .eq('business_slug', slug)
 
-      if (isMounted) {
-        if (data && !error) {
-          setAllOrders(data)
-        } else {
-          console.error('Error al cargar órdenes:', error)
+      // 2. Obtener Métricas de Vapi desde el Endpoint
+      try {
+        const res = await fetch(`/api/metrics?business_slug=${slug}`)
+        if (res.ok) {
+          const metricsData = await res.json()
+          if (isMounted) setVapiMetrics(metricsData)
         }
+      } catch (err) {
+        console.error('Error al obtener métricas de Vapi:', err)
+      }
+
+      if (isMounted) {
+        if (ordersData) setAllOrders(ordersData)
         setLoading(false)
       }
     }
 
-    fetchOrders()
+    fetchData()
 
     return () => {
       isMounted = false
@@ -204,7 +209,7 @@ export default function MetricsPage() {
       {/* Selector de Periodo */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
         <p style={{ color: themeStyles.subTextColor, fontSize: '0.88rem', margin: 0, fontWeight: 500 }}>
-          Resumen operativo de la actividad atendida por tu IA
+          Resumen operativo y consumo de minutos IA
         </p>
         
         <div style={{ 
@@ -287,11 +292,36 @@ export default function MetricsPage() {
               </div>
             </motion.div>
 
-            {/* Solicitudes Atendidas */}
+            {/* Minutos IA Disponibles */}
             <motion.div 
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3, delay: 0.1 }}
+              style={{ 
+                background: themeStyles.cardBg, 
+                border: `1px solid ${themeStyles.cardBorder}`, 
+                borderRadius: '20px', 
+                padding: '1.8rem',
+                backdropFilter: 'blur(10px)',
+                boxShadow: themeStyles.cardShadow
+              }}
+            >
+              <span style={{ fontSize: '0.8rem', color: themeStyles.subTextColor, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Minutos Disponibles IA
+              </span>
+              <div style={{ fontSize: '2.4rem', fontWeight: 900, color: themeStyles.secondaryMetricColor, margin: '0.4rem 0' }}>
+                {vapiMetrics?.metrics?.totalAvailableMinutes ?? 0} min
+              </div>
+              <div style={{ fontSize: '0.8rem', color: themeStyles.subTextColor, fontWeight: 500 }}>
+                Consumidos: {vapiMetrics?.metrics?.usedMinutes ?? 0} min este periodo
+              </div>
+            </motion.div>
+
+            {/* Solicitudes Atendidas */}
+            <motion.div 
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, delay: 0.15 }}
               style={{ 
                 background: themeStyles.cardBg, 
                 border: `1px solid ${themeStyles.cardBorder}`, 
@@ -308,39 +338,14 @@ export default function MetricsPage() {
                 {metrics.solicitudesCount}
               </div>
               <div style={{ fontSize: '0.8rem', color: themeStyles.subTextColor, fontWeight: 500 }}>
-                Pedidos y servicios cerrados
-              </div>
-            </motion.div>
-
-            {/* Ticket Promedio */}
-            <motion.div 
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3, delay: 0.15 }}
-              style={{ 
-                background: themeStyles.cardBg, 
-                border: `1px solid ${themeStyles.cardBorder}`, 
-                borderRadius: '20px', 
-                padding: '1.8rem',
-                backdropFilter: 'blur(10px)',
-                boxShadow: themeStyles.cardShadow
-              }}
-            >
-              <span style={{ fontSize: '0.8rem', color: themeStyles.subTextColor, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Ticket Promedio
-              </span>
-              <div style={{ fontSize: '2.4rem', fontWeight: 900, color: themeStyles.secondaryMetricColor, margin: '0.4rem 0' }}>
-                ${metrics.ticketPromedio.toLocaleString()}
-              </div>
-              <div style={{ fontSize: '0.8rem', color: themeStyles.subTextColor, fontWeight: 500 }}>
-                Valor medio por orden
+                Ticket prom: ${metrics.ticketPromedio.toLocaleString()}
               </div>
             </motion.div>
 
           </div>
 
           {/* Paneles Informativos */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '1.25rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '1.25rem', marginBottom: '1.5rem' }}>
             
             {/* Canales de Entrada */}
             <motion.div 
@@ -360,10 +365,9 @@ export default function MetricsPage() {
                 Canales de Entrada de la IA
               </h3>
               
-              {/* Llamadas de Voz */}
               <div style={{ marginBottom: '1.25rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '0.5rem' }}>
-                  <span style={{ color: themeStyles.textColor, fontWeight: 600 }}>📞 Llamadas de Voz</span>
+                  <span style={{ color: themeStyles.textColor, fontWeight: 600 }}>📞 Llamadas de Voz (Vapi)</span>
                   <span style={{ color: themeStyles.secondaryMetricColor, fontWeight: 800 }}>{metrics.vapiCount} atenciones</span>
                 </div>
                 <div style={{ width: '100%', background: themeStyles.progressBg, height: '8px', borderRadius: '999px', overflow: 'hidden' }}>
@@ -377,7 +381,6 @@ export default function MetricsPage() {
                 </div>
               </div>
 
-              {/* Mensajes de WhatsApp */}
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '0.5rem' }}>
                   <span style={{ color: themeStyles.textColor, fontWeight: 600 }}>💬 Mensajes de WhatsApp</span>
@@ -395,7 +398,7 @@ export default function MetricsPage() {
               </div>
             </motion.div>
 
-            {/* Eficiencia del Asistente */}
+            {/* Desglose de Saldos de Minutos */}
             <motion.div 
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
@@ -410,25 +413,93 @@ export default function MetricsPage() {
               }}
             >
               <h3 style={{ fontSize: '1.05rem', fontWeight: 800, margin: '0 0 1.5rem 0', letterSpacing: '-0.01em' }}>
-                Eficiencia del Asistente IA
+                Desglose de Saldos de Minutos
               </h3>
               
-              <div style={{ 
-                display: 'flex', 
-                justifyContent: 'space-between', 
-                alignItems: 'center', 
-                padding: '1rem', 
-                borderRadius: '12px',
-                background: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)',
-                border: `1px solid ${themeStyles.cardBorder}`,
-                fontSize: '0.88rem' 
-              }}>
-                <span style={{ color: themeStyles.subTextColor, fontWeight: 500 }}>Tiempo promedio de atención:</span>
-                <span style={{ color: themeStyles.textColor, fontWeight: 800 }}>{metrics.tiempoPromedio}</span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.88rem', padding: '0.6rem 0', borderBottom: `1px solid ${themeStyles.cardBorder}` }}>
+                  <span style={{ color: themeStyles.subTextColor, fontWeight: 500 }}>Minutos del Plan:</span>
+                  <span style={{ color: themeStyles.textColor, fontWeight: 800 }}>{vapiMetrics?.metrics?.balances?.included ?? 0} min</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.88rem', padding: '0.6rem 0', borderBottom: `1px solid ${themeStyles.cardBorder}` }}>
+                  <span style={{ color: themeStyles.subTextColor, fontWeight: 500 }}>Minutos Acumulados (Rollover):</span>
+                  <span style={{ color: themeStyles.textColor, fontWeight: 800 }}>{vapiMetrics?.metrics?.balances?.rollover ?? 0} min</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.88rem', padding: '0.6rem 0' }}>
+                  <span style={{ color: themeStyles.subTextColor, fontWeight: 500 }}>Saldo Bonus / Promocional:</span>
+                  <span style={{ color: themeStyles.primaryMetricColor, fontWeight: 800 }}>{vapiMetrics?.metrics?.balances?.bonus ?? 0} min</span>
+                </div>
               </div>
             </motion.div>
 
           </div>
+
+          {/* Historial Reciente de Llamadas Vapi */}
+          <motion.div
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: 0.3 }}
+            style={{ 
+              background: themeStyles.cardBg, 
+              border: `1px solid ${themeStyles.cardBorder}`, 
+              borderRadius: '20px', 
+              padding: '1.8rem',
+              backdropFilter: 'blur(10px)',
+              boxShadow: themeStyles.cardShadow
+            }}
+          >
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 800, margin: '0 0 1.25rem 0', letterSpacing: '-0.01em' }}>
+              Últimas Llamadas Atendidas por Vapi
+            </h3>
+
+            {vapiMetrics?.recentCalls?.length === 0 ? (
+              <p style={{ color: themeStyles.subTextColor, fontSize: '0.88rem', margin: 0 }}>No hay llamadas registradas en este periodo.</p>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
+                  <thead>
+                    <tr style={{ borderBottom: `1px solid ${themeStyles.cardBorder}`, color: themeStyles.subTextColor }}>
+                      <th style={{ padding: '0.75rem 0.5rem', fontWeight: 700 }}>ID LLAMADA</th>
+                      <th style={{ padding: '0.75rem 0.5rem', fontWeight: 700 }}>DURACIÓN</th>
+                      <th style={{ padding: '0.75rem 0.5rem', fontWeight: 700 }}>MINUTOS COBRADOS</th>
+                      <th style={{ padding: '0.75rem 0.5rem', fontWeight: 700 }}>ESTADO</th>
+                      <th style={{ padding: '0.75rem 0.5rem', fontWeight: 700 }}>FECHA</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {vapiMetrics?.recentCalls?.map((call: any) => (
+                      <tr key={call.id} style={{ borderBottom: `1px solid ${themeStyles.cardBorder}` }}>
+                        <td style={{ padding: '0.75rem 0.5rem', fontWeight: 600, fontFamily: 'monospace' }}>
+                          {call.vapi_call_id?.slice(0, 8)}...
+                        </td>
+                        <td style={{ padding: '0.75rem 0.5rem' }}>
+                          {call.duration_seconds} seg
+                        </td>
+                        <td style={{ padding: '0.75rem 0.5rem', fontWeight: 700, color: themeStyles.secondaryMetricColor }}>
+                          {call.duration_minutes} min
+                        </td>
+                        <td style={{ padding: '0.75rem 0.5rem' }}>
+                          <span style={{ 
+                            background: isDark ? 'rgba(52, 211, 153, 0.15)' : '#d1fae5', 
+                            color: themeStyles.primaryMetricColor, 
+                            padding: '0.2rem 0.6rem', 
+                            borderRadius: '100px', 
+                            fontSize: '0.75rem', 
+                            fontWeight: 700 
+                          }}>
+                            {call.status}
+                          </span>
+                        </td>
+                        <td style={{ padding: '0.75rem 0.5rem', color: themeStyles.subTextColor }}>
+                          {new Date(call.created_at).toLocaleString()}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </motion.div>
         </>
       )}
     </div>
