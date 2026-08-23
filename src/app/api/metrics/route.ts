@@ -8,25 +8,29 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const businessSlug = searchParams.get('business_slug');
+    const rawParam = searchParams.get('business_slug');
 
-    if (!businessSlug) {
+    if (!rawParam) {
       return NextResponse.json({ error: 'business_slug es requerido' }, { status: 400 });
     }
 
-    // 1. Buscar negocio por enlace_del_panel (corregido guion bajo) o por ID directamente
+    const cleanParam = decodeURIComponent(rawParam).trim();
+
+    // 1. Buscar en la columna "enlace del panel" (entre comillas por los espacios)
     let { data: business } = await supabase
       .from('businesses')
       .select('id')
-      .ilike('enlace_del_panel', `%${businessSlug}%`)
+      .eq('"enlace del panel"', cleanParam)
       .maybeSingle();
 
+    // Fallback: si no lo halla por enlace, buscar por ID UUID
     if (!business) {
       const { data: businessById } = await supabase
         .from('businesses')
         .select('id')
-        .eq('id', businessSlug)
+        .eq('id', cleanParam)
         .maybeSingle();
+
       business = businessById;
     }
 
@@ -42,23 +46,25 @@ export async function GET(request: Request) {
       });
     }
 
-    // 2. Buscar periodo de facturación activo
+    const businessId = business.id;
+
+    // 2. Obtener periodo de facturación activo del negocio
     const { data: period } = await supabase
       .from('billing_periods')
       .select('id, included_minutes, rollover_minutes, bonus_minutes')
-      .eq('business_id', business.id)
+      .eq('business_id', businessId)
       .eq('is_active', true)
       .maybeSingle();
 
-    // 3. Obtener llamadas recientes
+    // 3. Obtener llamadas de Vapi
     const { data: recentCalls } = await supabase
       .from('vapi_calls_log')
       .select('*')
-      .eq('business_id', business.id)
+      .eq('business_id', businessId)
       .order('created_at', { ascending: false })
       .limit(10);
 
-    // 4. Sumar saldo del ledger
+    // 4. Calcular consumo y disponibilidad en el Ledger
     let usedMinutes = 0;
     let availableMinutes = 0;
 
@@ -73,22 +79,18 @@ export async function GET(request: Request) {
         .eq('billing_period_id', period.id);
 
       if (ledger && ledger.length > 0) {
-        // Sumar asignaciones y restas registradas en el ledger
         const netLedger = ledger.reduce((acc, curr) => acc + Number(curr.amount), 0);
-        
-        // Calcular llamadas consumidas (movimientos negativos o de tipo CALL_USAGE)
+
         usedMinutes = ledger
           .filter(u => Number(u.amount) < 0 || u.type === 'CALL_USAGE')
           .reduce((acc, curr) => acc + Math.abs(Number(curr.amount)), 0);
 
         availableMinutes = Math.max(0, netLedger);
       } else {
-        // Si no hay entradas aún en el ledger, el disponible es el plan base
         availableMinutes = included + rollover + bonus;
       }
     }
 
-    // 5. Devolver JSON formateado compatible con el frontend de métricas
     return NextResponse.json({
       metrics: {
         totalAvailableMinutes: availableMinutes,
