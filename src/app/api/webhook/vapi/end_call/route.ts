@@ -6,6 +6,14 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
+// Mapeo para pruebas manuales en navegador (GET)
+export async function GET(req: Request) {
+  return NextResponse.json({ 
+    message: "El Webhook de Vapi está activo y escuchando peticiones POST." 
+  }, { status: 200 });
+}
+
+// Handler principal para Vapi (POST)
 export async function POST(req: Request) {
   try {
     const payload = await req.json();
