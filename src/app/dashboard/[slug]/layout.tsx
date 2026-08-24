@@ -182,7 +182,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   // Validación del PIN de seguridad
   const handleVerifyPin = () => {
-    const validPin = business?.pin_seguridad || '1234' // PIN por defecto si no está definido
+    // 💡 Corrección: Usar pin_facturacion de la columna exacta de Supabase
+    const validPin = business?.pin_facturacion || '1234'
+
     if (pinInput === String(validPin)) {
       setPinError('')
       setPinInput('')
@@ -617,15 +619,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>🔒</div>
               <h3 style={{ margin: '0 0 0.4rem 0', fontSize: '1.25rem', fontWeight: 800 }}>PIN de Seguridad</h3>
               <p style={{ margin: '0 0 1.5rem 0', fontSize: '0.75rem', color: themeStyles.subTextColor }}>
-                Ingresa tu PIN para acceder a la información confidencial de facturación.
+                Ingresa tu PIN de 4 dígitos para acceder.
               </p>
 
               <input
                 type="password"
-                maxLength={6}
+                maxLength={4} // 👈 1. Límite estricto a 4 dígitos
                 value={pinInput}
-                onChange={(e) => setPinInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleVerifyPin()}
+                onChange={(e) => {
+                  // 👈 2. Filtro: Solo números y máximo 4 caracteres
+                  const val = e.target.value.replace(/\D/g, '')
+                  if (val.length <= 4) {
+                    setPinInput(val)
+                    if (pinError) setPinError('')
+                  }
+                }}
+                onKeyDown={(e) => e.key === 'Enter' && pinInput.length === 4 && handleVerifyPin()}
                 placeholder="••••"
                 style={{
                   width: '100%',
@@ -671,16 +680,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 </button>
                 <button
                   onClick={handleVerifyPin}
+                  disabled={pinInput.length !== 4} // 👈 3. Se deshabilita hasta tener los 4 dígitos
                   style={{
                     flex: 1,
                     padding: '0.75rem',
                     borderRadius: '10px',
                     border: 'none',
-                    background: '#10b981',
-                    color: '#ffffff',
+                    background: pinInput.length === 4 ? '#10b981' : (isDark ? 'rgba(255,255,255,0.1)' : '#cbd5e1'),
+                    color: pinInput.length === 4 ? '#ffffff' : themeStyles.subTextColor,
                     fontSize: '0.8rem',
                     fontWeight: 700,
-                    cursor: 'pointer'
+                    cursor: pinInput.length === 4 ? 'pointer' : 'not-allowed',
+                    transition: 'all 0.2s ease'
                   }}
                 >
                   Desbloquear
