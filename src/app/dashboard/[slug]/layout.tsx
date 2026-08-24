@@ -24,7 +24,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   // Estados del modal y configuraciones visuales
   const [showSettingsModal, setShowSettingsModal] = useState(false)
-  const [showPinModal, setShowPinModal] = useState(false) // State para controlar el modal del PIN
+  const [showPinModal, setShowPinModal] = useState(false)
+  const [showVaultDataModal, setShowVaultDataModal] = useState(false)
+  const [pinInput, setPinInput] = useState('')
+  const [pinError, setPinError] = useState('')
+
   const [cuentaActiva, setCuentaActiva] = useState<boolean>(true)
   const [updatingCuenta, setUpdatingCuenta] = useState(false)
   const [themeMode, setThemeMode] = useState<'dark' | 'light'>('light')
@@ -107,7 +111,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return () => clearTimeout(timer)
   }, [])
 
-  // Manejador del mouse optimizado mediante animación continua
+  // Manejador del mouse
   useEffect(() => {
     let frameId: number
 
@@ -175,6 +179,20 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const businessName = useMemo(() => {
     return business?.['Nombre del negocio'] || business?.name || slug?.replace(/-/g, ' ').toUpperCase() || 'NEGOCIO'
   }, [business, slug])
+
+  // Validación del PIN de seguridad
+  const handleVerifyPin = () => {
+    const validPin = business?.pin_seguridad || '1234' // PIN por defecto si no está definido
+    if (pinInput === String(validPin)) {
+      setPinError('')
+      setPinInput('')
+      setShowPinModal(false)
+      setShowVaultDataModal(true)
+    } else {
+      setPinError('PIN incorrecto. Intenta de nuevo.')
+      setPinInput('')
+    }
+  }
 
   const rotX = (mouse.y - 0.5) * 8
   const rotY = (mouse.x - 0.5) * -8
@@ -382,7 +400,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </motion.button>
       </div>
 
-      {/* Modal de Configuración */}
+      {/* 1. Modal de Configuración */}
       <AnimatePresence>
         {showSettingsModal && (
           <motion.div
@@ -520,7 +538,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 </div>
 
                 <button
-                  onClick={() => setShowPinModal(true)}
+                  onClick={() => {
+                    setShowSettingsModal(false)
+                    setShowPinModal(true)
+                  }}
                   style={{
                     padding: '0.4rem 0.9rem',
                     borderRadius: '20px',
@@ -558,6 +579,219 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 }}
               >
                 Cerrar
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 2. Modal de Verificación de PIN */}
+      <AnimatePresence>
+        {showPinModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={{
+              position: 'fixed', inset: 0, zIndex: 110,
+              background: isDark ? 'rgba(0,0,0,0.85)' : 'rgba(15, 23, 42, 0.35)', backdropFilter: 'blur(8px)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem'
+            }}
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 15 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 15 }}
+              style={{
+                background: themeStyles.modalBg,
+                border: `1px solid ${themeStyles.modalBorder}`,
+                borderRadius: '18px',
+                padding: '2rem',
+                width: '100%',
+                maxWidth: '360px',
+                textAlign: 'center',
+                boxShadow: '0 25px 30px -10px rgba(0, 0, 0, 0.25)',
+                color: themeStyles.textColor
+              }}
+            >
+              <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>🔒</div>
+              <h3 style={{ margin: '0 0 0.4rem 0', fontSize: '1.25rem', fontWeight: 800 }}>PIN de Seguridad</h3>
+              <p style={{ margin: '0 0 1.5rem 0', fontSize: '0.75rem', color: themeStyles.subTextColor }}>
+                Ingresa tu PIN para acceder a la información confidencial de facturación.
+              </p>
+
+              <input
+                type="password"
+                maxLength={6}
+                value={pinInput}
+                onChange={(e) => setPinInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleVerifyPin()}
+                placeholder="••••"
+                style={{
+                  width: '100%',
+                  textAlign: 'center',
+                  fontSize: '1.8rem',
+                  letterSpacing: '0.5em',
+                  padding: '0.6rem',
+                  borderRadius: '10px',
+                  border: `1px solid ${pinError ? '#f43f5e' : themeStyles.modalBorder}`,
+                  background: isDark ? 'rgba(0,0,0,0.3)' : '#ffffff',
+                  color: themeStyles.textColor,
+                  outline: 'none',
+                  marginBottom: '0.8rem'
+                }}
+              />
+
+              {pinError && (
+                <p style={{ color: '#f43f5e', fontSize: '0.72rem', margin: '0 0 1rem 0', fontWeight: 600 }}>
+                  {pinError}
+                </p>
+              )}
+
+              <div style={{ display: 'flex', gap: '0.8rem', marginTop: '1rem' }}>
+                <button
+                  onClick={() => {
+                    setShowPinModal(false)
+                    setPinInput('')
+                    setPinError('')
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: '0.75rem',
+                    borderRadius: '10px',
+                    border: 'none',
+                    background: isDark ? 'rgba(255,255,255,0.08)' : '#e2e8f0',
+                    color: themeStyles.textColor,
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleVerifyPin}
+                  style={{
+                    flex: 1,
+                    padding: '0.75rem',
+                    borderRadius: '10px',
+                    border: 'none',
+                    background: '#10b981',
+                    color: '#ffffff',
+                    fontSize: '0.8rem',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Desbloquear
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 3. Modal de Bóveda y Facturación */}
+      <AnimatePresence>
+        {showVaultDataModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={{
+              position: 'fixed', inset: 0, zIndex: 120,
+              background: isDark ? 'rgba(0,0,0,0.85)' : 'rgba(15, 23, 42, 0.35)', backdropFilter: 'blur(8px)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem'
+            }}
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 10 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 10 }}
+              style={{
+                background: themeStyles.modalBg,
+                border: `1px solid ${themeStyles.modalBorder}`,
+                borderRadius: '18px',
+                padding: '2rem',
+                width: '100%',
+                maxWidth: '480px',
+                position: 'relative',
+                boxShadow: '0 25px 30px -10px rgba(0, 0, 0, 0.25)',
+                color: themeStyles.textColor
+              }}
+            >
+              <button
+                onClick={() => setShowVaultDataModal(false)}
+                style={{
+                  position: 'absolute', top: '1.2rem', right: '1.2rem',
+                  background: 'transparent', border: 'none', color: themeStyles.subTextColor,
+                  fontSize: '1.2rem', cursor: 'pointer'
+                }}
+              >
+                ✕
+              </button>
+
+              <h3 style={{ margin: '0 0 0.3rem 0', fontSize: '1.3rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                💳 Bóveda de Seguridad & Facturación
+              </h3>
+              <p style={{ margin: '0 0 1.5rem 0', fontSize: '0.75rem', color: themeStyles.subTextColor }}>
+                Credenciales de cobro e integración de pasarela.
+              </p>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div style={{
+                  background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(255, 255, 255, 0.6)',
+                  border: `1px solid ${themeStyles.cardBorder}`,
+                  borderRadius: '12px',
+                  padding: '1rem'
+                }}>
+<p style={{ margin: '0 0 0.3rem 0', fontSize: '0.7rem', color: themeStyles.subTextColor, textTransform: 'uppercase', fontWeight: 700 }}>                    MERCADO PAGO ACCESS TOKEN
+                  </p>
+                  <code style={{
+                    fontSize: '0.78rem',
+                    background: isDark ? 'rgba(0,0,0,0.4)' : '#ffffff',
+                    padding: '0.4rem 0.6rem',
+                    borderRadius: '6px',
+                    display: 'block',
+                    wordBreak: 'break-all'
+                  }}>
+                    {business?.mp_access_token || 'APP_USR-********************************'}
+                  </code>
+                </div>
+
+                <div style={{
+                  background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(255, 255, 255, 0.6)',
+                  border: `1px solid ${themeStyles.cardBorder}`,
+                  borderRadius: '12px',
+                  padding: '1rem'
+                }}>
+<p style={{ margin: '0 0 0.3rem 0', fontSize: '0.7rem', color: themeStyles.subTextColor, textTransform: 'uppercase', fontWeight: 700 }}>                    ESTADO DE INTEGRACIÓN
+                  </p>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.2rem' }}>
+                    <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981' }} />
+                    <span style={{ fontSize: '0.85rem', fontWeight: 700 }}>Pasarela Conectada</span>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setShowVaultDataModal(false)}
+                style={{
+                  marginTop: '1.5rem',
+                  width: '100%',
+                  padding: '0.75rem',
+                  borderRadius: '10px',
+                  border: 'none',
+                  background: isDark ? 'rgba(255,255,255,0.08)' : '#e2e8f0',
+                  color: themeStyles.textColor,
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  cursor: 'pointer'
+                }}
+              >
+                Cerrar Bóveda
               </button>
             </motion.div>
           </motion.div>
