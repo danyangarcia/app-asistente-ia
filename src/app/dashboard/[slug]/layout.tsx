@@ -182,7 +182,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   // Validación del PIN de seguridad
   const handleVerifyPin = () => {
-    // 💡 Corrección: Usar pin_facturacion de la columna exacta de Supabase
     const validPin = business?.pin_facturacion || '1234'
 
     if (pinInput === String(validPin)) {
@@ -535,7 +534,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <div>
                   <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 600 }}>💳 Bóveda y Facturación</p>
                   <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.7rem', color: themeStyles.subTextColor }}>
-                    PIN de seguridad y Mercado Pago
+                    PIN de seguridad y Planes
                   </p>
                 </div>
 
@@ -624,10 +623,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
               <input
                 type="password"
-                maxLength={4} // 👈 1. Límite estricto a 4 dígitos
+                maxLength={4}
                 value={pinInput}
                 onChange={(e) => {
-                  // 👈 2. Filtro: Solo números y máximo 4 caracteres
                   const val = e.target.value.replace(/\D/g, '')
                   if (val.length <= 4) {
                     setPinInput(val)
@@ -680,7 +678,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 </button>
                 <button
                   onClick={handleVerifyPin}
-                  disabled={pinInput.length !== 4} // 👈 3. Se deshabilita hasta tener los 4 dígitos
+                  disabled={pinInput.length !== 4}
                   style={{
                     flex: 1,
                     padding: '0.75rem',
@@ -702,7 +700,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         )}
       </AnimatePresence>
 
-      {/* 3. Modal de Bóveda y Facturación */}
+      {/* 3. Modal de Facturación y Suscripción (Versión Amplia para Cliente) */}
       <AnimatePresence>
         {showVaultDataModal && (
           <motion.div
@@ -711,101 +709,214 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             exit={{ opacity: 0 }}
             style={{
               position: 'fixed', inset: 0, zIndex: 120,
-              background: isDark ? 'rgba(0,0,0,0.85)' : 'rgba(15, 23, 42, 0.35)', backdropFilter: 'blur(8px)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem'
+              background: isDark ? 'rgba(0,0,0,0.85)' : 'rgba(15, 23, 42, 0.45)', 
+              backdropFilter: 'blur(10px)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem'
             }}
           >
             <motion.div
-              initial={{ scale: 0.95, y: 10 }}
+              initial={{ scale: 0.95, y: 15 }}
               animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.95, y: 10 }}
+              exit={{ scale: 0.95, y: 15 }}
               style={{
                 background: themeStyles.modalBg,
                 border: `1px solid ${themeStyles.modalBorder}`,
-                borderRadius: '18px',
-                padding: '2rem',
+                borderRadius: '24px',
+                padding: '2.5rem',
                 width: '100%',
-                maxWidth: '480px',
+                maxWidth: '850px',
+                maxHeight: '90vh',
+                overflowY: 'auto',
                 position: 'relative',
-                boxShadow: '0 25px 30px -10px rgba(0, 0, 0, 0.25)',
+                boxShadow: '0 30px 60px -12px rgba(0, 0, 0, 0.45)',
                 color: themeStyles.textColor
               }}
             >
+              {/* Botón Cerrar */}
               <button
                 onClick={() => setShowVaultDataModal(false)}
                 style={{
-                  position: 'absolute', top: '1.2rem', right: '1.2rem',
-                  background: 'transparent', border: 'none', color: themeStyles.subTextColor,
-                  fontSize: '1.2rem', cursor: 'pointer'
+                  position: 'absolute', top: '1.5rem', right: '1.5rem',
+                  background: isDark ? 'rgba(255,255,255,0.05)' : '#e2e8f0', 
+                  border: 'none', borderRadius: '50%', width: '36px', height: '36px',
+                  color: themeStyles.textColor, fontSize: '1.1rem', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center'
                 }}
               >
                 ✕
               </button>
 
-              <h3 style={{ margin: '0 0 0.3rem 0', fontSize: '1.3rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                💳 Bóveda de Seguridad & Facturación
-              </h3>
-              <p style={{ margin: '0 0 1.5rem 0', fontSize: '0.75rem', color: themeStyles.subTextColor }}>
-                Credenciales de cobro e integración de pasarela.
-              </p>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <div style={{
-                  background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(255, 255, 255, 0.6)',
-                  border: `1px solid ${themeStyles.cardBorder}`,
-                  borderRadius: '12px',
-                  padding: '1rem'
-                }}>
-                  <p style={{ margin: '0 0 0.3rem 0', fontSize: '0.7rem', color: themeStyles.subTextColor, textTransform: 'uppercase', fontWeight: 700 }}>
-                    MERCADO PAGO ACCESS TOKEN
-                  </p>
-                  <code style={{
-                    fontSize: '0.78rem',
-                    background: isDark ? 'rgba(0,0,0,0.4)' : '#ffffff',
-                    padding: '0.4rem 0.6rem',
-                    borderRadius: '6px',
-                    display: 'block',
-                    wordBreak: 'break-all'
-                  }}>
-                    {business?.mp_access_token || 'APP_USR-********************************'}
-                  </code>
-                </div>
-
-                <div style={{
-                  background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(255, 255, 255, 0.6)',
-                  border: `1px solid ${themeStyles.cardBorder}`,
-                  borderRadius: '12px',
-                  padding: '1rem'
-                }}>
-                  <p style={{ margin: '0 0 0.3rem 0', fontSize: '0.7rem', color: themeStyles.subTextColor, textTransform: 'uppercase', fontWeight: 700 }}>
-                    ESTADO DE INTEGRACIÓN
-                  </p>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.2rem' }}>
-                    <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981' }} />
-                    <span style={{ fontSize: '0.85rem', fontWeight: 700 }}>Pasarela Conectada</span>
-                  </div>
-                </div>
+              {/* Encabezado */}
+              <div style={{ marginBottom: '2rem' }}>
+                <h2 style={{ margin: '0 0 0.4rem 0', fontSize: '1.6rem', fontWeight: 900, display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                  💳 Planes y Facturación
+                </h2>
+                <p style={{ margin: 0, fontSize: '0.85rem', color: themeStyles.subTextColor }}>
+                  Gestiona tu método de pago, consulta tu próximo día de cobro y revisa tus comprobantes.
+                </p>
               </div>
 
-              <button
-                onClick={() => setShowVaultDataModal(false)}
-                style={{
-                  marginTop: '1.5rem',
-                  width: '100%',
-                  padding: '0.75rem',
-                  borderRadius: '10px',
-                  border: 'none',
-                  background: isDark ? 'rgba(255,255,255,0.08)' : '#e2e8f0',
-                  color: themeStyles.textColor,
-                  fontSize: '0.8rem',
-                  fontWeight: 600,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em',
-                  cursor: 'pointer'
-                }}
-              >
-                Cerrar Bóveda
-              </button>
+              {/* Grid Principal (2 Columnas) */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem' }}>
+                
+                {/* COLUMNA IZQUIERDA: Detalle del Plan y Próximo Cobro */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
+                  
+                  {/* Caja Plan Activo */}
+                  <div style={{
+                    background: isDark ? 'linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.01) 100%)' : '#ffffff',
+                    border: `1px solid ${themeStyles.cardBorder}`,
+                    borderRadius: '16px', padding: '1.5rem',
+                    boxShadow: isDark ? 'none' : '0 4px 15px rgba(0,0,0,0.03)'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div>
+                        <span style={{ fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#10b981' }}>
+                          ● Suscripción Activa
+                        </span>
+                        <h3 style={{ margin: '0.3rem 0 0 0', fontSize: '1.3rem', fontWeight: 800 }}>
+                          {business?.plan_nombre || 'Plan Pro Software'}
+                        </h3>
+                      </div>
+                      <span style={{ fontSize: '1.2rem', fontWeight: 900 }}>
+                        ${business?.plan_precio || '499'}<span style={{ fontSize: '0.75rem', fontWeight: 500, color: themeStyles.subTextColor }}>/mes</span>
+                      </span>
+                    </div>
+
+                    <hr style={{ border: 'none', borderTop: `1px solid ${themeStyles.modalBorder}`, margin: '1.2rem 0' }} />
+
+                    {/* Fecha de Renovación */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <p style={{ margin: 0, fontSize: '0.7rem', color: themeStyles.subTextColor, textTransform: 'uppercase', fontWeight: 700 }}>
+                          Próxima Fecha de Cobro
+                        </p>
+                        <p style={{ margin: '0.2rem 0 0 0', fontSize: '1rem', fontWeight: 800 }}>
+                          {business?.fecha_renovacion || '15 de Septiembre, 2026'}
+                        </p>
+                      </div>
+                      <div style={{
+                        background: isDark ? 'rgba(16,185,129,0.15)' : '#ecfdf5',
+                        color: '#059669', padding: '0.4rem 0.8rem', borderRadius: '10px',
+                        fontSize: '0.75rem', fontWeight: 800
+                      }}>
+                        En 23 días
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Métodos de Pago Saved Card */}
+                  <div style={{
+                    background: isDark ? 'rgba(255,255,255,0.02)' : '#ffffff',
+                    border: `1px solid ${themeStyles.cardBorder}`,
+                    borderRadius: '16px', padding: '1.5rem',
+                    boxShadow: isDark ? 'none' : '0 4px 15px rgba(0,0,0,0.03)'
+                  }}>
+                    <p style={{ margin: '0 0 1rem 0', fontSize: '0.75rem', color: themeStyles.subTextColor, textTransform: 'uppercase', fontWeight: 800 }}>
+                      Tarjeta Registrada
+                    </p>
+
+                    {/* Vista Estilo Tarjeta Bóveda */}
+                    <div style={{
+                      background: isDark ? 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)' : 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+                      borderRadius: '12px', padding: '1.2rem', color: '#ffffff',
+                      display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: '110px',
+                      boxShadow: '0 8px 20px rgba(0,0,0,0.15)'
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.8rem', fontWeight: 800, letterSpacing: '0.1em' }}>VISA</span>
+                        <span style={{ fontSize: '0.7rem', opacity: 0.7 }}>Débito / Crédito</span>
+                      </div>
+                      <div style={{ fontSize: '1.1rem', letterSpacing: '0.2em', fontWeight: 700 }}>
+                        •••• •••• •••• {business?.tarjeta_ultimos_digitos || '4242'}
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => alert('Abrir pasarela para actualizar tarjeta...')}
+                      style={{
+                        marginTop: '1rem', width: '100%', padding: '0.7rem',
+                        borderRadius: '10px', border: `1px solid ${themeStyles.modalBorder}`,
+                        background: 'transparent', color: themeStyles.textColor,
+                        fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer',
+                        transition: 'all 0.2s ease'
+                      }}
+                    >
+                      + Cambiar o Añadir Tarjeta
+                    </button>
+                  </div>
+
+                </div>
+
+                {/* COLUMNA DERECHA: Historial de Facturas & Acciones */}
+                <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '1.2rem' }}>
+                  
+                  {/* Historial de Pagos */}
+                  <div style={{
+                    background: isDark ? 'rgba(255,255,255,0.02)' : '#ffffff',
+                    border: `1px solid ${themeStyles.cardBorder}`,
+                    borderRadius: '16px', padding: '1.5rem', flex: 1,
+                    boxShadow: isDark ? 'none' : '0 4px 15px rgba(0,0,0,0.03)'
+                  }}>
+                    <p style={{ margin: '0 0 1rem 0', fontSize: '0.75rem', color: themeStyles.subTextColor, textTransform: 'uppercase', fontWeight: 800 }}>
+                      Últimos Comprobantes
+                    </p>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                      
+                      {/* Ítem Factura 1 */}
+                      <div style={{
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                        padding: '0.8rem', borderRadius: '10px',
+                        background: isDark ? 'rgba(255,255,255,0.03)' : '#f8fafc',
+                        border: `1px solid ${themeStyles.cardBorder}`
+                      }}>
+                        <div>
+                          <p style={{ margin: 0, fontSize: '0.8rem', fontWeight: 700 }}>15 Ago, 2026</p>
+                          <p style={{ margin: '0.1rem 0 0 0', fontSize: '0.68rem', color: themeStyles.subTextColor }}>Pago Mensual - $499 MXN</p>
+                        </div>
+                        <span style={{ fontSize: '0.7rem', color: '#10b981', fontWeight: 800, background: 'rgba(16,185,129,0.1)', padding: '0.3rem 0.6rem', borderRadius: '6px' }}>
+                          Pagado
+                        </span>
+                      </div>
+
+                      {/* Ítem Factura 2 */}
+                      <div style={{
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                        padding: '0.8rem', borderRadius: '10px',
+                        background: isDark ? 'rgba(255,255,255,0.03)' : '#f8fafc',
+                        border: `1px solid ${themeStyles.cardBorder}`
+                      }}>
+                        <div>
+                          <p style={{ margin: 0, fontSize: '0.8rem', fontWeight: 700 }}>15 Jul, 2026</p>
+                          <p style={{ margin: '0.1rem 0 0 0', fontSize: '0.68rem', color: themeStyles.subTextColor }}>Pago Mensual - $499 MXN</p>
+                        </div>
+                        <span style={{ fontSize: '0.7rem', color: '#10b981', fontWeight: 800, background: 'rgba(16,185,129,0.1)', padding: '0.3rem 0.6rem', borderRadius: '6px' }}>
+                          Pagado
+                        </span>
+                      </div>
+
+                    </div>
+                  </div>
+
+                  {/* Footer de Acciones */}
+                  <div style={{ display: 'flex', gap: '1rem' }}>
+                    <button
+                      onClick={() => setShowVaultDataModal(false)}
+                      style={{
+                        flex: 1, padding: '0.85rem', borderRadius: '12px', border: 'none',
+                        background: isDark ? 'rgba(255,255,255,0.08)' : '#e2e8f0',
+                        color: themeStyles.textColor, fontSize: '0.8rem', fontWeight: 700,
+                        textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer'
+                      }}
+                    >
+                      Cerrar Ventana
+                    </button>
+                  </div>
+
+                </div>
+
+              </div>
             </motion.div>
           </motion.div>
         )}
