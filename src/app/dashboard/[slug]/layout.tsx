@@ -24,6 +24,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   // Estados del modal y configuraciones visuales
   const [showSettingsModal, setShowSettingsModal] = useState(false)
+  const [showPinModal, setShowPinModal] = useState(false) // State para controlar el modal del PIN
   const [cuentaActiva, setCuentaActiva] = useState<boolean>(true)
   const [updatingCuenta, setUpdatingCuenta] = useState(false)
   const [themeMode, setThemeMode] = useState<'dark' | 'light'>('light')
@@ -473,7 +474,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 padding: '1rem',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'space-between'
+                justifyContent: 'space-between',
+                marginBottom: '1rem'
               }}>
                 <div>
                   <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 600 }}>Aspecto Visual</p>
@@ -497,6 +499,44 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   }}
                 >
                   {isDark ? '🌙 Oscuro' : '☀️ Claro'}
+                </button>
+              </div>
+
+              {/* Bóveda de Seguridad & Facturación */}
+              <div style={{
+                background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(255, 255, 255, 0.6)',
+                border: `1px solid ${themeStyles.cardBorder}`,
+                borderRadius: '12px',
+                padding: '1rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between'
+              }}>
+                <div>
+                  <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 600 }}>💳 Bóveda y Facturación</p>
+                  <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.7rem', color: themeStyles.subTextColor }}>
+                    PIN de seguridad y Mercado Pago
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => setShowPinModal(true)}
+                  style={{
+                    padding: '0.4rem 0.9rem',
+                    borderRadius: '20px',
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    border: '1px solid rgba(16,185,129,0.4)',
+                    background: 'rgba(16,185,129,0.15)',
+                    color: '#059669',
+                    transition: 'all 0.2s ease',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.3rem'
+                  }}
+                >
+                  🔒 Acceder
                 </button>
               </div>
 
