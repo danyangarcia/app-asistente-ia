@@ -55,26 +55,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     bgColor: isDark ? '#080808' : '#e2e8f0', 
     textColor: isDark ? '#FFFFFF' : '#0f172a', 
     subTextColor: isDark ? 'rgba(255,255,255,0.45)' : '#475569', 
-    
-    // Blanco translúcido para el efecto cristal en claro
     cardBg: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(255, 255, 255, 0.75)', 
-    
-    // Borde fino blanco brillante para delimitar en claro
     cardBorder: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(255, 255, 255, 0.9)', 
-    
-    // Sombras suaves de elevación natural
     buttonShadow: isDark 
       ? '0 8px 25px rgba(0,0,0,0.2)' 
       : '0 4px 15px rgba(0, 0, 0, 0.04), inset 0 1px 0 rgba(255,255,255,1)', 
     buttonHoverShadow: isDark 
       ? '0 12px 30px rgba(0,0,0,0.35)' 
       : '0 8px 22px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255,255,255,1)', 
-      
     modalBg: isDark ? '#121216' : '#f8fafc',
     modalBorder: isDark ? 'rgba(255,255,255,0.1)' : '#cbd5e1',
   }), [isDark])
 
-  // Carga de datos del negocio desde Supabase utilizando la columna 'enlace del panel'
+  // Carga de datos del negocio desde Supabase
   useEffect(() => {
     let isMounted = true
 
@@ -700,7 +693,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         )}
       </AnimatePresence>
 
-      {/* 3. Modal de Facturación y Suscripción (Versión Amplia para Cliente) */}
+      {/* 3. Modal de Facturación y Suscripción (Dinámico) */}
       <AnimatePresence>
         {showVaultDataModal && (
           <motion.div
@@ -752,7 +745,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   💳 Planes y Facturación
                 </h2>
                 <p style={{ margin: 0, fontSize: '0.85rem', color: themeStyles.subTextColor }}>
-                  Gestiona tu método de pago, consulta tu próximo día de cobro y revisa tus comprobantes.
+                  Gestiona tu método de pago, consulta tu próximo día de cobro y descarga tus facturas.
                 </p>
               </div>
 
@@ -775,24 +768,25 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                           ● Suscripción Activa
                         </span>
                         <h3 style={{ margin: '0.3rem 0 0 0', fontSize: '1.3rem', fontWeight: 800 }}>
-                          {business?.plan_nombre || 'Plan Pro Software'}
+                          {business?.plan_nombre || business?.['Plan'] || 'Plan Negocio'}
                         </h3>
                       </div>
                       <span style={{ fontSize: '1.2rem', fontWeight: 900 }}>
-                        ${business?.plan_precio || '499'}<span style={{ fontSize: '0.75rem', fontWeight: 500, color: themeStyles.subTextColor }}>/mes</span>
+                        ${business?.plan_precio || business?.['Precio Plan'] || '0'}
+                        <span style={{ fontSize: '0.75rem', fontWeight: 500, color: themeStyles.subTextColor }}>/mes</span>
                       </span>
                     </div>
 
                     <hr style={{ border: 'none', borderTop: `1px solid ${themeStyles.modalBorder}`, margin: '1.2rem 0' }} />
 
-                    {/* Fecha de Renovación */}
+                    {/* Fecha de Renovación Real */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
                         <p style={{ margin: 0, fontSize: '0.7rem', color: themeStyles.subTextColor, textTransform: 'uppercase', fontWeight: 700 }}>
                           Próxima Fecha de Cobro
                         </p>
                         <p style={{ margin: '0.2rem 0 0 0', fontSize: '1rem', fontWeight: 800 }}>
-                          {business?.fecha_renovacion || '15 de Septiembre, 2026'}
+                          {business?.fecha_renovacion || business?.['Fecha Cobro'] || 'No configurada'}
                         </p>
                       </div>
                       <div style={{
@@ -800,12 +794,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                         color: '#059669', padding: '0.4rem 0.8rem', borderRadius: '10px',
                         fontSize: '0.75rem', fontWeight: 800
                       }}>
-                        En 23 días
+                        Al día
                       </div>
                     </div>
                   </div>
 
-                  {/* Métodos de Pago Saved Card */}
+                  {/* Método de Pago */}
                   <div style={{
                     background: isDark ? 'rgba(255,255,255,0.02)' : '#ffffff',
                     border: `1px solid ${themeStyles.cardBorder}`,
@@ -816,7 +810,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                       Tarjeta Registrada
                     </p>
 
-                    {/* Vista Estilo Tarjeta Bóveda */}
                     <div style={{
                       background: isDark ? 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)' : 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
                       borderRadius: '12px', padding: '1.2rem', color: '#ffffff',
@@ -824,16 +817,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                       boxShadow: '0 8px 20px rgba(0,0,0,0.15)'
                     }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: '0.8rem', fontWeight: 800, letterSpacing: '0.1em' }}>VISA</span>
+                        <span style={{ fontSize: '0.8rem', fontWeight: 800, letterSpacing: '0.1em' }}>VISA / MC</span>
                         <span style={{ fontSize: '0.7rem', opacity: 0.7 }}>Débito / Crédito</span>
                       </div>
                       <div style={{ fontSize: '1.1rem', letterSpacing: '0.2em', fontWeight: 700 }}>
-                        •••• •••• •••• {business?.tarjeta_ultimos_digitos || '4242'}
+                        •••• •••• •••• {business?.tarjeta_ultimos_digitos || business?.['Tarjeta'] || '****'}
                       </div>
                     </div>
 
                     <button
-                      onClick={() => alert('Abrir pasarela para actualizar tarjeta...')}
+                      onClick={() => {
+                        console.log('Cambiar método de pago')
+                      }}
                       style={{
                         marginTop: '1rem', width: '100%', padding: '0.7rem',
                         borderRadius: '10px', border: `1px solid ${themeStyles.modalBorder}`,
@@ -842,16 +837,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                         transition: 'all 0.2s ease'
                       }}
                     >
-                      + Cambiar o Añadir Tarjeta
+                      + Actualizar Tarjeta
                     </button>
                   </div>
 
                 </div>
 
-                {/* COLUMNA DERECHA: Historial de Facturas & Acciones */}
+                {/* COLUMNA DERECHA: Historial & Facturación Fiscal */}
                 <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '1.2rem' }}>
                   
-                  {/* Historial de Pagos */}
                   <div style={{
                     background: isDark ? 'rgba(255,255,255,0.02)' : '#ffffff',
                     border: `1px solid ${themeStyles.cardBorder}`,
@@ -859,47 +853,50 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     boxShadow: isDark ? 'none' : '0 4px 15px rgba(0,0,0,0.03)'
                   }}>
                     <p style={{ margin: '0 0 1rem 0', fontSize: '0.75rem', color: themeStyles.subTextColor, textTransform: 'uppercase', fontWeight: 800 }}>
-                      Últimos Comprobantes
+                      Historial y Comprobantes Fiscales
                     </p>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
                       
-                      {/* Ítem Factura 1 */}
+                      {/* Recibo / Factura 1 */}
                       <div style={{
                         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                        padding: '0.8rem', borderRadius: '10px',
+                        padding: '0.8rem 1rem', borderRadius: '10px',
                         background: isDark ? 'rgba(255,255,255,0.03)' : '#f8fafc',
                         border: `1px solid ${themeStyles.cardBorder}`
                       }}>
                         <div>
-                          <p style={{ margin: 0, fontSize: '0.8rem', fontWeight: 700 }}>15 Ago, 2026</p>
-                          <p style={{ margin: '0.1rem 0 0 0', fontSize: '0.68rem', color: themeStyles.subTextColor }}>Pago Mensual - $499 MXN</p>
+                          <p style={{ margin: 0, fontSize: '0.8rem', fontWeight: 700 }}>
+                            {business?.fecha_ultimo_pago || 'Mes Actual'}
+                          </p>
+                          <p style={{ margin: '0.1rem 0 0 0', fontSize: '0.68rem', color: themeStyles.subTextColor }}>
+                            Suscripción Mensual
+                          </p>
                         </div>
-                        <span style={{ fontSize: '0.7rem', color: '#10b981', fontWeight: 800, background: 'rgba(16,185,129,0.1)', padding: '0.3rem 0.6rem', borderRadius: '6px' }}>
-                          Pagado
-                        </span>
-                      </div>
 
-                      {/* Ítem Factura 2 */}
-                      <div style={{
-                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                        padding: '0.8rem', borderRadius: '10px',
-                        background: isDark ? 'rgba(255,255,255,0.03)' : '#f8fafc',
-                        border: `1px solid ${themeStyles.cardBorder}`
-                      }}>
-                        <div>
-                          <p style={{ margin: 0, fontSize: '0.8rem', fontWeight: 700 }}>15 Jul, 2026</p>
-                          <p style={{ margin: '0.1rem 0 0 0', fontSize: '0.68rem', color: themeStyles.subTextColor }}>Pago Mensual - $499 MXN</p>
-                        </div>
-                        <span style={{ fontSize: '0.7rem', color: '#10b981', fontWeight: 800, background: 'rgba(16,185,129,0.1)', padding: '0.3rem 0.6rem', borderRadius: '6px' }}>
-                          Pagado
-                        </span>
+                        <button
+                          onClick={() => {
+                            console.log('Solicitando comprobante fiscal')
+                          }}
+                          style={{
+                            fontSize: '0.7rem',
+                            color: '#10b981',
+                            fontWeight: 800,
+                            background: 'rgba(16,185,129,0.1)',
+                            border: '1px solid rgba(16,185,129,0.3)',
+                            padding: '0.4rem 0.8rem',
+                            borderRadius: '6px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          📄 Facturar / Descargar
+                        </button>
                       </div>
 
                     </div>
                   </div>
 
-                  {/* Footer de Acciones */}
+                  {/* Botón Inferior */}
                   <div style={{ display: 'flex', gap: '1rem' }}>
                     <button
                       onClick={() => setShowVaultDataModal(false)}
