@@ -1,252 +1,585 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
+import { useRouter, usePathname } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
-import { createClient } from '@supabase/supabase-js'
-import { useParams, useRouter } from 'next/navigation'
+import LoadingScreen from '@/components/LoadingScreen'
+import { createClient } from '@/lib/supabaseClient'
 
-// Inicializa cliente de Supabase
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-)
+// Instanciación única del cliente fuera del ciclo de renders
+const supabase = createClient()
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const params = useParams()
   const router = useRouter()
-  const slug = params?.slug as string
+  const pathname = usePathname()
+  
+  // Extracción limpia del slug
+  const slug = useMemo(() => pathname.split('/')[2] || '', [pathname])
 
-  // Estados generales
   const [business, setBusiness] = useState<any>(null)
-  const [subscription, setSubscription] = useState<any>(null)
-  const [plan, setPlan] = useState<any>(null)
-  const [billingPeriods, setBillingPeriods] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-  const [isDark, setIsDark] = useState(true)
+  const [loaded, setLoaded] = useState(false)
+  const [leaving, setLeaving] = useState<'left' | 'right' | null>(null)
+  const [mouse, setMouse] = useState({ x: 0.5, y: 0.5 })
+  const [hovering, setHovering] = useState<'leftBtn' | 'rightBtn' | null>(null)
 
-  // Estados de Modales
+  // Estados del modal y configuraciones visuales
+  const [showSettingsModal, setShowSettingsModal] = useState(false)
   const [showPinModal, setShowPinModal] = useState(false)
+  const [showVaultDataModal, setShowVaultDataModal] = useState(false)
   const [pinInput, setPinInput] = useState('')
   const [pinError, setPinError] = useState('')
-  
-  const [showVaultDataModal, setShowVaultDataModal] = useState(false)
 
-  // Estilos de Tema dinámicos
-  const themeStyles = {
-    modalBg: isDark ? '#0f172a' : '#ffffff',
-    modalBorder: isDark ? 'rgba(255, 255, 255, 0.1)' : '#e2e8f0',
-    cardBorder: isDark ? 'rgba(255, 255, 255, 0.07)' : '#f1f5f9',
-    textColor: isDark ? '#f8fafc' : '#0f172a',
-    subTextColor: isDark ? '#94a3b8' : '#64748b'
-  }
+  const [cuentaActiva, setCuentaActiva] = useState<boolean>(true)
+  const [updatingCuenta, setUpdatingCuenta] = useState(false)
+  const [themeMode, setThemeMode] = useState<'dark' | 'light'>('light')
 
-  // 1. Cargar datos relacionados desde Supabase usando 'enlace del panel'
+  // Persistencia de tema
   useEffect(() => {
-    async function fetchBusinessData() {
+    const savedTheme = localStorage.getItem('dashboard_theme') as 'dark' | 'light'
+    if (savedTheme) {
+      setThemeMode(savedTheme)
+    }
+  }, [])
+
+  const toggleTheme = useCallback(() => {
+    setThemeMode((prev) => {
+      const nextTheme = prev === 'dark' ? 'light' : 'dark'
+      localStorage.setItem('dashboard_theme', nextTheme)
+      return nextTheme
+    })
+  }, [])
+
+  // Propiedades derivadas del tema optimizadas para el Modo Claro
+  const isDark = themeMode === 'dark'
+  const themeStyles = useMemo(() => ({
+    bgColor: isDark ? '#080808' : '#e2e8f0', 
+    textColor: isDark ? '#FFFFFF' : '#0f172a', 
+    subTextColor: isDark ? 'rgba(255,255,255,0.45)' : '#475569', 
+    cardBg: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(255, 255, 255, 0.75)', 
+    cardBorder: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(255, 255, 255, 0.9)', 
+    buttonShadow: isDark 
+      ? '0 8px 25px rgba(0,0,0,0.2)' 
+      : '0 4px 15px rgba(0, 0, 0, 0.04), inset 0 1px 0 rgba(255,255,255,1)', 
+    buttonHoverShadow: isDark 
+      ? '0 12px 30px rgba(0,0,0,0.35)' 
+      : '0 8px 22px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255,255,255,1)', 
+    modalBg: isDark ? '#121216' : '#f8fafc',
+    modalBorder: isDark ? 'rgba(255,255,255,0.1)' : '#cbd5e1',
+  }), [isDark])
+
+  // Carga de datos del negocio desde Supabase
+  useEffect(() => {
+    let isMounted = true
+
+    async function fetchLayoutData() {
       if (!slug) return
-      try {
-        // Buscar negocio por la columna real 'enlace del panel'
-        const { data: bizData, error: bizError } = await supabase
-          .from('businesses')
-          .select('*')
-          .eq('enlace del panel', slug)
-          .single()
-
-        if (bizError) throw bizError
-        if (bizData) {
-          setBusiness(bizData)
-
-          // Validar si la cuenta está activa (Columna 'Cuenta Activa')
-          if (bizData['Cuenta Activa'] === false) {
-            console.warn('Este negocio se encuentra inactivo.')
-          }
-
-          // Buscar suscripción asociada al business_id
-          const { data: subData } = await supabase
-            .from('subscriptions')
-            .select('*')
-            .eq('business_id', bizData.id)
-            .single()
-
-          if (subData) {
-            setSubscription(subData)
-
-            // Buscar plan asociado
-            if (subData.plan_id) {
-              const { data: planData } = await supabase
-                .from('plans')
-                .select('*')
-                .eq('id', subData.plan_id)
-                .single()
-
-              if (planData) setPlan(planData)
-            }
-          }
-
-          // Buscar periodos de facturación / recibos
-          const { data: billData } = await supabase
-            .from('billing_periods')
-            .select('*')
-            .eq('business_id', bizData.id)
-
-          if (billData) setBillingPeriods(billData)
-        }
-      } catch (err) {
-        console.error('Error al cargar datos de Supabase:', err)
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchBusinessData()
-  }, [slug])
-
-  // 2. Lógica para verificar el PIN de seguridad ('pin_facturacion')
-  const handleVerifyPin = async () => {
-    if (!business) return
-
-    const storedPin = business['pin_facturacion'] || '1234' // Respaldo por defecto si es NULL
-
-    if (pinInput === storedPin) {
-      setPinError('')
-      setShowPinModal(false)
-      setPinInput('')
-      setShowVaultDataModal(true)
-    } else {
-      setPinError('PIN incorrecto. Inténtalo de nuevo.')
-    }
-  }
-
-  // 3. Funciones de Facturación y Suscripción con las tablas reales
-  const handleUpdateCard = async () => {
-    const newDigits = prompt('Ingresa los últimos 4 dígitos de tu nueva tarjeta:')
-    if (!newDigits || newDigits.length !== 4 || !subscription) return
-
-    try {
-      const { error } = await supabase
-        .from('subscriptions')
-        .update({ card_last_four: newDigits })
-        .eq('id', subscription.id)
-
-      if (error) throw error
-
-      setSubscription({ ...subscription, card_last_four: newDigits })
-      alert('¡Tarjeta actualizada con éxito!')
-    } catch (err) {
-      console.error('Error al actualizar tarjeta:', err)
-      alert('Hubo un error al actualizar la tarjeta.')
-    }
-  }
-
-  const handleDeleteCard = async () => {
-    if (!confirm('¿Estás seguro de eliminar la tarjeta registrada?') || !subscription) return
-
-    try {
-      const { error } = await supabase
-        .from('subscriptions')
-        .update({ card_last_four: null })
-        .eq('id', subscription.id)
-
-      if (error) throw error
-
-      setSubscription({ ...subscription, card_last_four: null })
-      alert('Tarjeta eliminada correctamente.')
-    } catch (err) {
-      console.error('Error al eliminar tarjeta:', err)
-    }
-  }
-
-  const handleChangePlan = async () => {
-    const newPlanName = prompt('Escribe el nombre del nuevo plan (PRO, PREMIUM, NORMAL, DEMO):', plan?.name || '')
-    if (!newPlanName) return
-
-    try {
-      // Buscar el plan en la tabla 'plans'
-      const { data: targetPlan, error: planError } = await supabase
-        .from('plans')
+      const { data, error } = await supabase
+        .from('businesses')
         .select('*')
-        .ilike('name', newPlanName)
+        .eq('enlace del panel', slug)
         .single()
 
-      if (planError || !targetPlan) {
-        alert('No se encontró un plan con ese nombre.')
-        return
+      if (isMounted) {
+        if (data) {
+          setBusiness(data)
+          if (typeof data['Cuenta Activa'] === 'boolean') {
+            setCuentaActiva(data['Cuenta Activa'])
+          }
+        } else {
+          console.error('Error al cargar negocio en layout:', error)
+        }
       }
+    }
 
-      // Actualizar la suscripción con el nuevo plan_id
-      const { error: subError } = await supabase
-        .from('subscriptions')
-        .update({ plan_id: targetPlan.id })
-        .eq('id', subscription.id)
+    fetchLayoutData()
 
-      if (subError) throw subError
+    return () => {
+      isMounted = false
+    }
+  }, [slug])
 
-      setPlan(targetPlan)
-      alert('¡Plan actualizado correctamente!')
-    } catch (err) {
-      console.error('Error al cambiar plan:', err)
-      alert('No se pudo actualizar el plan.')
+  // Timer de carga inicial
+  useEffect(() => {
+    const timer = setTimeout(() => setLoaded(true), 2800)
+    return () => clearTimeout(timer)
+  }, [])
+
+  // Manejador del mouse
+  useEffect(() => {
+    let frameId: number
+
+    const handleMouseMove = (e: MouseEvent) => {
+      frameId = requestAnimationFrame(() => {
+        setMouse({
+          x: e.clientX / window.innerWidth,
+          y: e.clientY / window.innerHeight
+        })
+      })
+    }
+
+    window.addEventListener('mousemove', handleMouseMove)
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove)
+      cancelAnimationFrame(frameId)
+    }
+  }, [])
+
+  const toggleCuentaActiva = async () => {
+    if (!slug) return
+    const nuevoEstado = !cuentaActiva
+    
+    setCuentaActiva(nuevoEstado)
+    setUpdatingCuenta(true)
+
+    const { error } = await supabase
+      .from('businesses')
+      .update({ 'Cuenta Activa': nuevoEstado })
+      .eq('enlace del panel', slug)
+
+    if (error) {
+      console.error('Error al actualizar Cuenta Activa:', error)
+      setCuentaActiva(!nuevoEstado)
+    }
+
+    setUpdatingCuenta(false)
+  }
+
+  const navigate = useCallback((path: string, dir: 'left' | 'right') => {
+    if (pathname === path) return
+    setLeaving(dir)
+    setTimeout(() => {
+      setLeaving(null)
+      router.push(path)
+    }, 500)
+  }, [pathname, router])
+
+  const config = useMemo(() => ({
+    leftLabel: 'Catálogo / Oferta', 
+    leftPath: `/dashboard/${slug}/catalog`,
+    panelName: 'Tablero Operativo', 
+    mainPath: `/dashboard/${slug}/board`
+  }), [slug])
+
+  const rightPath = useMemo(() => `/dashboard/${slug}/metrics`, [slug])
+
+  // Redirección por defecto
+  useEffect(() => {
+    if (pathname === `/dashboard/${slug}` && loaded) {
+      router.replace(config.mainPath)
+    }
+  }, [pathname, slug, router, config.mainPath, loaded])
+
+  const businessName = useMemo(() => {
+    return business?.['Nombre del negocio'] || business?.name || slug?.replace(/-/g, ' ').toUpperCase() || 'NEGOCIO'
+  }, [business, slug])
+
+  // Validación del PIN de seguridad
+  const handleVerifyPin = () => {
+    const validPin = business?.pin_facturacion || '1234'
+
+    if (pinInput === String(validPin)) {
+      setPinError('')
+      setPinInput('')
+      setShowPinModal(false)
+      setShowVaultDataModal(true)
+    } else {
+      setPinError('PIN incorrecto. Intenta de nuevo.')
+      setPinInput('')
     }
   }
 
-  const handleCancelBusiness = async () => {
-    const confirmation = prompt('ADVERTENCIA: Esto cancelará tu suscripción y APAGARÁ el negocio inmediatamente. Escribe "CANCELAR" para confirmar:')
-    if (confirmation !== 'CANCELAR') return
-
-    try {
-      // Apagar negocio cambiando 'Cuenta Activa' a false
-      const { error: bizError } = await supabase
-        .from('businesses')
-        .update({ 'Cuenta Activa': false })
-        .eq('id', business.id)
-
-      if (bizError) throw bizError
-
-      // Actualizar estado de la suscripción
-      if (subscription) {
-        await supabase
-          .from('subscriptions')
-          .update({ status: 'cancelled' })
-          .eq('id', subscription.id)
-      }
-
-      alert('El negocio ha sido desactivado y la suscripción cancelada.')
-      setShowVaultDataModal(false)
-      router.push('/')
-    } catch (err) {
-      console.error('Error al cancelar el negocio:', err)
-      alert('Hubo un error al procesar la cancelación.')
-    }
-  }
-
-  if (loading) {
-    return (
-      <div style={{ display: 'flex', height: '100vh', alignItems: 'center', justifyContent: 'center', background: '#0f172a', color: '#fff' }}>
-        <p>Cargando panel de control...</p>
-      </div>
-    )
-  }
+  const rotX = (mouse.y - 0.5) * 8
+  const rotY = (mouse.x - 0.5) * -8
+  const lightX = mouse.x * 100
+  const lightY = mouse.y * 100
 
   return (
-    <div style={{ minHeight: '100vh', background: isDark ? '#090d16' : '#f8fafc', color: themeStyles.textColor }}>
-      
-      {/* Barra superior */}
-      <header style={{ padding: '1rem 2rem', display: 'flex', justifyContent: 'space-between', borderBottom: `1px solid ${themeStyles.modalBorder}` }}>
-        <h2 style={{ fontSize: '1.1rem', margin: 0 }}>Panel: {business?.['Nombre del negocio'] || slug}</h2>
-        <button 
-          onClick={() => setShowPinModal(true)}
-          style={{ background: '#10b981', color: '#fff', border: 'none', padding: '0.5rem 1rem', borderRadius: '8px', fontWeight: 700, cursor: 'pointer' }}
+    <div
+      style={{
+        minHeight: '100vh',
+        background: themeStyles.bgColor,
+        color: themeStyles.textColor,
+        fontFamily: "'Inter', system-ui, sans-serif",
+        overflow: 'hidden',
+        position: 'relative',
+        transition: 'background 0.3s ease, color 0.3s ease'
+      }}
+    >
+      <LoadingScreen businessName={businessName} />
+
+      {/* Iluminación Radial Interactiva */}
+      <div style={{
+        position: 'fixed', inset: 0, zIndex: 0,
+        background: isDark 
+          ? `radial-gradient(ellipse 700px 500px at ${lightX}% ${lightY}%, rgba(255,255,255,0.018) 0%, transparent 70%)`
+          : `radial-gradient(ellipse 750px 550px at ${lightX}% ${lightY}%, rgba(255, 255, 255, 0.4) 0%, rgba(226, 232, 240, 0) 70%)`,
+        pointerEvents: 'none', transition: 'background 0.08s linear'
+      }} />
+
+      {/* Ruido de Fondo */}
+      <div style={{
+        position: 'fixed', inset: 0, zIndex: 0,
+        backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='${isDark ? '0.02' : '0.03'}'/%3E%3C/svg%3E")`,
+        backgroundSize: '256px 256px', pointerEvents: 'none'
+      }} />
+
+      {/* Transición de Navegación */}
+      <AnimatePresence>
+        {leaving && (
+          <motion.div
+            initial={{ x: leaving === 'left' ? '100%' : '-100%' }}
+            animate={{ x: 0 }}
+            transition={{ duration: 0.45, ease: [0.76, 0, 0.24, 1] }}
+            style={{ position: 'fixed', inset: 0, background: themeStyles.bgColor, zIndex: 98 }}
+          />
+        )}
+      </AnimatePresence>
+
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: loaded ? 1 : 0 }}
+        transition={{ duration: 0.8 }}
+        style={{ position: 'relative', zIndex: 1, minHeight: '100vh' }}
+      >
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '2.5rem 5rem',
+        }}>
+
+          {/* Botón Izquierdo (Catálogo) */}
+          <motion.button
+            initial={{ opacity: 0, x: -50 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.2, duration: 0.6 }}
+            onHoverStart={() => setHovering('leftBtn')}
+            onHoverEnd={() => setHovering(null)}
+            whileHover={{ y: -3, scale: 1.02 }}
+            whileTap={{ y: 1, scale: 0.97 }}
+            onClick={() => navigate(config.leftPath, 'left')}
+            style={{
+              background: hovering === 'leftBtn' && !isDark ? '#FFFFFF' : themeStyles.cardBg,
+              border: `1px solid ${themeStyles.cardBorder}`,
+              borderRadius: '100px', 
+              padding: '0.9rem 2.5rem', 
+              color: themeStyles.textColor, 
+              fontSize: '0.78rem',
+              fontWeight: 800, 
+              letterSpacing: '0.15em', 
+              textTransform: 'uppercase', 
+              cursor: 'pointer',
+              backdropFilter: 'blur(10px)', 
+              position: 'relative', 
+              overflow: 'hidden',
+              boxShadow: hovering === 'leftBtn' ? themeStyles.buttonHoverShadow : themeStyles.buttonShadow,
+              transition: 'all 0.2s ease'
+            }}
+          >
+            <span style={{ position: 'relative', zIndex: 1 }}>{config.leftLabel}</span>
+          </motion.button>
+
+          {/* Centro (Título y Nombre del Negocio) */}
+          <motion.div
+            initial={{ opacity: 0, y: 20, scale: 0.92 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ delay: 0.1, duration: 0.7, ease: [0.25, 0.46, 0.45, 0.94] }}
+            style={{ perspective: '1200px', textAlign: 'center', cursor: 'pointer' }}
+            onClick={() => navigate(config.mainPath, 'left')}
+          >
+            <motion.div
+              animate={{ rotateX: rotX, rotateY: rotY }}
+              transition={{ type: 'spring', stiffness: 70, damping: 20 }}
+              style={{ transformStyle: 'preserve-3d' }}
+            >
+              <h1 style={{
+                fontSize: 'clamp(1.8rem, 4vw, 3.8rem)', fontWeight: 900, textTransform: 'uppercase',
+                letterSpacing: '0.15em', margin: 0, lineHeight: 1, color: themeStyles.textColor,
+                textShadow: isDark 
+                  ? `0 1px 0 rgba(255,255,255,0.25), 0 2px 0 rgba(180,180,180,0.15), 0 4px 0 rgba(120,120,120,0.1)` 
+                  : `0 2px 4px rgba(0,0,0,0.08)`
+              }}>
+                {businessName}
+              </h1>
+              <p style={{
+                fontSize: '0.75rem', 
+                letterSpacing: '0.3em', 
+                color: themeStyles.subTextColor,
+                textTransform: 'uppercase', 
+                marginTop: '0.8rem', 
+                fontWeight: 700
+              }}>
+                {config.panelName}
+              </p>
+            </motion.div>
+          </motion.div>
+
+          {/* Botón Derecho (Métricas) */}
+          <motion.button
+            initial={{ opacity: 0, x: 50 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.2, duration: 0.6 }}
+            onHoverStart={() => setHovering('rightBtn')}
+            onHoverEnd={() => setHovering(null)}
+            whileHover={{ y: -3, scale: 1.02 }}
+            whileTap={{ y: 1, scale: 0.97 }}
+            onClick={() => navigate(rightPath, 'right')}
+            style={{
+              background: hovering === 'rightBtn' && !isDark ? '#FFFFFF' : themeStyles.cardBg,
+              border: `1px solid ${themeStyles.cardBorder}`,
+              borderRadius: '100px', 
+              padding: '0.9rem 2.5rem', 
+              color: themeStyles.textColor, 
+              fontSize: '0.78rem',
+              fontWeight: 800, 
+              letterSpacing: '0.15em', 
+              textTransform: 'uppercase', 
+              cursor: 'pointer',
+              backdropFilter: 'blur(10px)', 
+              position: 'relative', 
+              overflow: 'hidden',
+              boxShadow: hovering === 'rightBtn' ? themeStyles.buttonHoverShadow : themeStyles.buttonShadow,
+              transition: 'all 0.2s ease'
+            }}
+          >
+            <span style={{ position: 'relative', zIndex: 1 }}>Métricas</span>
+          </motion.button>
+        </div>
+
+        {/* Contenido Principal */}
+        <motion.div
+          key={pathname}
+          initial={{ opacity: 0, x: leaving === 'left' ? -30 : 30, filter: 'blur(6px)' }}
+          animate={{ opacity: 1, x: 0, filter: 'blur(0px)' }}
+          transition={{ duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] }}
+          style={{ padding: '0 5rem 5rem' }}
         >
-          🔒 Configuración y Suscripción
-        </button>
-      </header>
+          {children}
+        </motion.div>
+      </motion.div>
 
-      {/* Contenido principal */}
-      <main style={{ padding: '2rem' }}>
-        {children}
-      </main>
+      {/* Botón Flotante Configuración */}
+      <div style={{ position: 'fixed', bottom: '1.5rem', right: '1.5rem', zIndex: 99 }}>
+        <motion.button
+          whileHover={{ scale: 1.08, rotate: 45 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={() => setShowSettingsModal(true)}
+          style={{
+            background: isDark ? 'rgba(20, 20, 25, 0.85)' : 'rgba(255, 255, 255, 0.85)',
+            border: `1px solid ${themeStyles.cardBorder}`,
+            borderRadius: '50%',
+            width: '48px',
+            height: '48px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: themeStyles.textColor,
+            cursor: 'pointer',
+            backdropFilter: 'blur(10px)',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.08)'
+          }}
+          title="Configuración del Negocio"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+            <circle cx="12" cy="12" r="3" />
+          </svg>
+        </motion.button>
+      </div>
 
-      {/* Modal de PIN de Seguridad */}
+      {/* 1. Modal de Configuración */}
+      <AnimatePresence>
+        {showSettingsModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={{
+              position: 'fixed', inset: 0, zIndex: 100,
+              background: isDark ? 'rgba(0,0,0,0.8)' : 'rgba(15, 23, 42, 0.25)', backdropFilter: 'blur(6px)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem'
+            }}
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 10 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 10 }}
+              style={{
+                background: themeStyles.modalBg,
+                border: `1px solid ${themeStyles.modalBorder}`,
+                borderRadius: '16px',
+                padding: '1.8rem',
+                width: '100%',
+                maxWidth: '420px',
+                position: 'relative',
+                boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
+                color: themeStyles.textColor
+              }}
+            >
+              <button
+                onClick={() => setShowSettingsModal(false)}
+                style={{
+                  position: 'absolute', top: '1.2rem', right: '1.2rem',
+                  background: 'transparent', border: 'none', color: themeStyles.subTextColor,
+                  fontSize: '1.2rem', cursor: 'pointer'
+                }}
+              >
+                ✕
+              </button>
+
+              <h3 style={{ margin: '0 0 0.3rem 0', fontSize: '1.2rem', fontWeight: 700 }}>
+                ⚙️ Ajustes del Negocio
+              </h3>
+              <p style={{ margin: '0 0 1.5rem 0', fontSize: '0.75rem', color: themeStyles.subTextColor }}>
+                Administra la disponibilidad y la apariencia visual del panel.
+              </p>
+
+              {/* Estado de la Cuenta */}
+              <div style={{
+                background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(255, 255, 255, 0.6)',
+                border: `1px solid ${themeStyles.cardBorder}`,
+                borderRadius: '12px',
+                padding: '1rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: '1rem'
+              }}>
+                <div>
+                  <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 600 }}>Estado de la Cuenta</p>
+                  <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.7rem', color: themeStyles.subTextColor }}>
+                    {cuentaActiva ? 'Atendiendo pedidos' : 'Cerrado temporalmente'}
+                  </p>
+                </div>
+
+                <button
+                  onClick={toggleCuentaActiva}
+                  disabled={updatingCuenta}
+                  style={{
+                    padding: '0.4rem 0.9rem',
+                    borderRadius: '20px',
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    border: cuentaActiva ? '1px solid rgba(16,185,129,0.4)' : '1px solid rgba(244,63,94,0.4)',
+                    background: cuentaActiva ? 'rgba(16,185,129,0.15)' : 'rgba(244,63,94,0.15)',
+                    color: cuentaActiva ? '#059669' : '#e11d48',
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  {updatingCuenta ? 'Guardando...' : cuentaActiva ? '● Abierto' : '○ Cerrado'}
+                </button>
+              </div>
+
+              {/* Aspecto Visual */}
+              <div style={{
+                background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(255, 255, 255, 0.6)',
+                border: `1px solid ${themeStyles.cardBorder}`,
+                borderRadius: '12px',
+                padding: '1rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: '1rem'
+              }}>
+                <div>
+                  <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 600 }}>Aspecto Visual</p>
+                  <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.7rem', color: themeStyles.subTextColor }}>
+                    Modo {isDark ? 'Oscuro' : 'Claro'}
+                  </p>
+                </div>
+
+                <button
+                  onClick={toggleTheme}
+                  style={{
+                    padding: '0.4rem 0.9rem',
+                    borderRadius: '20px',
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    border: `1px solid ${themeStyles.cardBorder}`,
+                    background: themeStyles.cardBg,
+                    color: themeStyles.textColor,
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  {isDark ? '🌙 Oscuro' : '☀️ Claro'}
+                </button>
+              </div>
+
+              {/* Bóveda de Seguridad & Facturación */}
+              <div style={{
+                background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(255, 255, 255, 0.6)',
+                border: `1px solid ${themeStyles.cardBorder}`,
+                borderRadius: '12px',
+                padding: '1rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between'
+              }}>
+                <div>
+                  <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 600 }}>💳 Bóveda y Facturación</p>
+                  <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.7rem', color: themeStyles.subTextColor }}>
+                    PIN de seguridad y Planes
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => {
+                    setShowSettingsModal(false)
+                    setShowPinModal(true)
+                  }}
+                  style={{
+                    padding: '0.4rem 0.9rem',
+                    borderRadius: '20px',
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    border: '1px solid rgba(16,185,129,0.4)',
+                    background: 'rgba(16,185,129,0.15)',
+                    color: '#059669',
+                    transition: 'all 0.2s ease',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.3rem'
+                  }}
+                >
+                  🔒 Acceder
+                </button>
+              </div>
+
+              <button
+                onClick={() => setShowSettingsModal(false)}
+                style={{
+                  marginTop: '1.5rem',
+                  width: '100%',
+                  padding: '0.75rem',
+                  borderRadius: '10px',
+                  border: 'none',
+                  background: isDark ? 'rgba(255,255,255,0.08)' : '#e2e8f0',
+                  color: themeStyles.textColor,
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  cursor: 'pointer'
+                }}
+              >
+                Cerrar
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 2. Modal de Verificación de PIN */}
       <AnimatePresence>
         {showPinModal && (
           <motion.div
@@ -255,8 +588,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             exit={{ opacity: 0 }}
             style={{
               position: 'fixed', inset: 0, zIndex: 110,
-              background: isDark ? 'rgba(0,0,0,0.8)' : 'rgba(15, 23, 42, 0.4)',
-              backdropFilter: 'blur(8px)',
+              background: isDark ? 'rgba(0,0,0,0.85)' : 'rgba(15, 23, 42, 0.35)', backdropFilter: 'blur(8px)',
               display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem'
             }}
           >
@@ -279,7 +611,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>🔒</div>
               <h3 style={{ margin: '0 0 0.4rem 0', fontSize: '1.25rem', fontWeight: 800 }}>PIN de Seguridad</h3>
               <p style={{ margin: '0 0 1.5rem 0', fontSize: '0.75rem', color: themeStyles.subTextColor }}>
-                Ingresa tu PIN de facturación para acceder.
+                Ingresa tu PIN de 4 dígitos para acceder.
               </p>
 
               <input
@@ -324,9 +656,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     setPinError('')
                   }}
                   style={{
-                    flex: 1, padding: '0.75rem', borderRadius: '10px', border: 'none',
+                    flex: 1,
+                    padding: '0.75rem',
+                    borderRadius: '10px',
+                    border: 'none',
                     background: isDark ? 'rgba(255,255,255,0.08)' : '#e2e8f0',
-                    color: themeStyles.textColor, fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer'
+                    color: themeStyles.textColor,
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    cursor: 'pointer'
                   }}
                 >
                   Cancelar
@@ -335,10 +673,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   onClick={handleVerifyPin}
                   disabled={pinInput.length !== 4}
                   style={{
-                    flex: 1, padding: '0.75rem', borderRadius: '10px', border: 'none',
+                    flex: 1,
+                    padding: '0.75rem',
+                    borderRadius: '10px',
+                    border: 'none',
                     background: pinInput.length === 4 ? '#10b981' : (isDark ? 'rgba(255,255,255,0.1)' : '#cbd5e1'),
                     color: pinInput.length === 4 ? '#ffffff' : themeStyles.subTextColor,
-                    fontSize: '0.8rem', fontWeight: 700, cursor: pinInput.length === 4 ? 'pointer' : 'not-allowed',
+                    fontSize: '0.8rem',
+                    fontWeight: 700,
+                    cursor: pinInput.length === 4 ? 'pointer' : 'not-allowed',
                     transition: 'all 0.2s ease'
                   }}
                 >
@@ -350,7 +693,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         )}
       </AnimatePresence>
 
-      {/* Modal de Facturación y Suscripción */}
+      {/* 3. Modal de Facturación y Suscripción (Dinámico) */}
       <AnimatePresence>
         {showVaultDataModal && (
           <motion.div
@@ -396,6 +739,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 ✕
               </button>
 
+              {/* Encabezado */}
               <div style={{ marginBottom: '2rem' }}>
                 <h2 style={{ margin: '0 0 0.4rem 0', fontSize: '1.6rem', fontWeight: 900, display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
                   💳 Planes y Facturación
@@ -405,41 +749,44 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 </p>
               </div>
 
+              {/* Grid Principal (2 Columnas) */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem' }}>
                 
-                {/* COLUMNA IZQUIERDA: Plan Activo y Tarjeta */}
+                {/* COLUMNA IZQUIERDA: Detalle del Plan y Próximo Cobro */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
                   
-                  {/* Plan Activo */}
+                  {/* Caja Plan Activo */}
                   <div style={{
                     background: isDark ? 'linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.01) 100%)' : '#ffffff',
                     border: `1px solid ${themeStyles.cardBorder}`,
-                    borderRadius: '16px', padding: '1.5rem'
+                    borderRadius: '16px', padding: '1.5rem',
+                    boxShadow: isDark ? 'none' : '0 4px 15px rgba(0,0,0,0.03)'
                   }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                       <div>
                         <span style={{ fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#10b981' }}>
-                          ● Suscripción {subscription?.status || 'Activa'}
+                          ● Suscripción Activa
                         </span>
                         <h3 style={{ margin: '0.3rem 0 0 0', fontSize: '1.3rem', fontWeight: 800 }}>
-                          {plan?.name || 'Plan Estándar'}
+                          {business?.plan_nombre || business?.['Plan'] || 'Plan Negocio'}
                         </h3>
                       </div>
                       <span style={{ fontSize: '1.2rem', fontWeight: 900 }}>
-                        ${plan?.price_mxn || '0'}
-                        <span style={{ fontSize: '0.75rem', fontWeight: 500, color: themeStyles.subTextColor }}> MXN/mes</span>
+                        ${business?.plan_precio || business?.['Precio Plan'] || '0'}
+                        <span style={{ fontSize: '0.75rem', fontWeight: 500, color: themeStyles.subTextColor }}>/mes</span>
                       </span>
                     </div>
 
                     <hr style={{ border: 'none', borderTop: `1px solid ${themeStyles.modalBorder}`, margin: '1.2rem 0' }} />
 
+                    {/* Fecha de Renovación Real */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
                         <p style={{ margin: 0, fontSize: '0.7rem', color: themeStyles.subTextColor, textTransform: 'uppercase', fontWeight: 700 }}>
                           Próxima Fecha de Cobro
                         </p>
                         <p style={{ margin: '0.2rem 0 0 0', fontSize: '1rem', fontWeight: 800 }}>
-                          {subscription?.current_period_end ? new Date(subscription.current_period_end).toLocaleDateString() : 'N/A'}
+                          {business?.fecha_renovacion || business?.['Fecha Cobro'] || 'No configurada'}
                         </p>
                       </div>
                       <div style={{
@@ -447,146 +794,109 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                         color: '#059669', padding: '0.4rem 0.8rem', borderRadius: '10px',
                         fontSize: '0.75rem', fontWeight: 800
                       }}>
-                        {plan?.included_minutes ? `${plan.included_minutes} mins` : 'Activo'}
+                        Al día
                       </div>
                     </div>
-
-                    <button
-                      onClick={handleChangePlan}
-                      style={{
-                        marginTop: '1rem', width: '100%', padding: '0.6rem',
-                        borderRadius: '10px', border: `1px solid ${themeStyles.modalBorder}`,
-                        background: 'transparent', color: '#10b981',
-                        fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer'
-                      }}
-                    >
-                      ⚡ Cambiar de Plan
-                    </button>
                   </div>
 
                   {/* Método de Pago */}
                   <div style={{
                     background: isDark ? 'rgba(255,255,255,0.02)' : '#ffffff',
                     border: `1px solid ${themeStyles.cardBorder}`,
-                    borderRadius: '16px', padding: '1.5rem'
+                    borderRadius: '16px', padding: '1.5rem',
+                    boxShadow: isDark ? 'none' : '0 4px 15px rgba(0,0,0,0.03)'
                   }}>
                     <p style={{ margin: '0 0 1rem 0', fontSize: '0.75rem', color: themeStyles.subTextColor, textTransform: 'uppercase', fontWeight: 800 }}>
                       Tarjeta Registrada
                     </p>
 
                     <div style={{
-                      background: isDark ? 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)' : 'linear-gradient(135deg, #0f172a 100%, #1e293b 100%)',
+                      background: isDark ? 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)' : 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
                       borderRadius: '12px', padding: '1.2rem', color: '#ffffff',
                       display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: '110px',
                       boxShadow: '0 8px 20px rgba(0,0,0,0.15)'
                     }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: '0.8rem', fontWeight: 800, letterSpacing: '0.1em' }}>{subscription?.card_brand || 'VISA / MC'}</span>
+                        <span style={{ fontSize: '0.8rem', fontWeight: 800, letterSpacing: '0.1em' }}>VISA / MC</span>
                         <span style={{ fontSize: '0.7rem', opacity: 0.7 }}>Débito / Crédito</span>
                       </div>
                       <div style={{ fontSize: '1.1rem', letterSpacing: '0.2em', fontWeight: 700 }}>
-                        •••• •••• •••• {subscription?.card_last_four || '****'}
+                        •••• •••• •••• {business?.tarjeta_ultimos_digitos || business?.['Tarjeta'] || '****'}
                       </div>
                     </div>
 
-                    <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
-                      <button
-                        onClick={handleUpdateCard}
-                        style={{
-                          flex: 1, padding: '0.7rem',
-                          borderRadius: '10px', border: `1px solid ${themeStyles.modalBorder}`,
-                          background: 'transparent', color: themeStyles.textColor,
-                          fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer'
-                        }}
-                      >
-                        Actualizar Tarjeta
-                      </button>
-                      <button
-                        onClick={handleDeleteCard}
-                        style={{
-                          padding: '0.7rem 1rem',
-                          borderRadius: '10px', border: '1px solid rgba(244,63,94,0.3)',
-                          background: 'rgba(244,63,94,0.1)', color: '#f43f5e',
-                          fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer'
-                        }}
-                      >
-                        Eliminar
-                      </button>
-                    </div>
+                    <button
+                      onClick={() => {
+                        console.log('Cambiar método de pago')
+                      }}
+                      style={{
+                        marginTop: '1rem', width: '100%', padding: '0.7rem',
+                        borderRadius: '10px', border: `1px solid ${themeStyles.modalBorder}`,
+                        background: 'transparent', color: themeStyles.textColor,
+                        fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer',
+                        transition: 'all 0.2s ease'
+                      }}
+                    >
+                      + Actualizar Tarjeta
+                    </button>
                   </div>
 
                 </div>
 
-                {/* COLUMNA DERECHA: Historial / Recibos y Zona de Peligro */}
+                {/* COLUMNA DERECHA: Historial & Facturación Fiscal */}
                 <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '1.2rem' }}>
                   
                   <div style={{
                     background: isDark ? 'rgba(255,255,255,0.02)' : '#ffffff',
                     border: `1px solid ${themeStyles.cardBorder}`,
-                    borderRadius: '16px', padding: '1.5rem', flex: 1
+                    borderRadius: '16px', padding: '1.5rem', flex: 1,
+                    boxShadow: isDark ? 'none' : '0 4px 15px rgba(0,0,0,0.03)'
                   }}>
                     <p style={{ margin: '0 0 1rem 0', fontSize: '0.75rem', color: themeStyles.subTextColor, textTransform: 'uppercase', fontWeight: 800 }}>
                       Historial y Comprobantes Fiscales
                     </p>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
-                      {billingPeriods.length > 0 ? (
-                        billingPeriods.map((period) => (
-                          <div key={period.id} style={{
-                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                            padding: '0.8rem 1rem', borderRadius: '10px',
-                            background: isDark ? 'rgba(255,255,255,0.03)' : '#f8fafc',
-                            border: `1px solid ${themeStyles.cardBorder}`
-                          }}>
-                            <div>
-                              <p style={{ margin: 0, fontSize: '0.8rem', fontWeight: 700 }}>
-                                {new Date(period.start_date).toLocaleDateString()} - {new Date(period.end_date).toLocaleDateString()}
-                              </p>
-                              <p style={{ margin: '0.1rem 0 0 0', fontSize: '0.68rem', color: themeStyles.subTextColor }}>
-                                Minutos incluidos: {period.included_minutes}
-                              </p>
-                            </div>
+                      
+                      {/* Recibo / Factura 1 */}
+                      <div style={{
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                        padding: '0.8rem 1rem', borderRadius: '10px',
+                        background: isDark ? 'rgba(255,255,255,0.03)' : '#f8fafc',
+                        border: `1px solid ${themeStyles.cardBorder}`
+                      }}>
+                        <div>
+                          <p style={{ margin: 0, fontSize: '0.8rem', fontWeight: 700 }}>
+                            {business?.fecha_ultimo_pago || 'Mes Actual'}
+                          </p>
+                          <p style={{ margin: '0.1rem 0 0 0', fontSize: '0.68rem', color: themeStyles.subTextColor }}>
+                            Suscripción Mensual
+                          </p>
+                        </div>
 
-                            {period.invoice_url ? (
-                              <a
-                                href={period.invoice_url}
-                                target="_blank"
-                                rel="noreferrer"
-                                style={{
-                                  fontSize: '0.7rem', color: '#10b981', fontWeight: 800,
-                                  background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)',
-                                  padding: '0.4rem 0.8rem', borderRadius: '6px', textDecoration: 'none'
-                                }}
-                              >
-                                📄 Descargar
-                              </a>
-                            ) : (
-                              <span style={{ fontSize: '0.7rem', color: themeStyles.subTextColor }}>Sin factura</span>
-                            )}
-                          </div>
-                        ))
-                      ) : (
-                        <p style={{ fontSize: '0.75rem', color: themeStyles.subTextColor }}>No hay periodos de facturación recientes.</p>
-                      )}
+                        <button
+                          onClick={() => {
+                            console.log('Solicitando comprobante fiscal')
+                          }}
+                          style={{
+                            fontSize: '0.7rem',
+                            color: '#10b981',
+                            fontWeight: 800,
+                            background: 'rgba(16,185,129,0.1)',
+                            border: '1px solid rgba(16,185,129,0.3)',
+                            padding: '0.4rem 0.8rem',
+                            borderRadius: '6px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          📄 Facturar / Descargar
+                        </button>
+                      </div>
+
                     </div>
-
-                    {/* Zona de peligro / Apagar Negocio */}
-                    <div style={{ marginTop: '2rem', padding: '1rem', borderRadius: '12px', background: 'rgba(244,63,94,0.05)', border: '1px solid rgba(244,63,94,0.15)' }}>
-                      <p style={{ margin: '0 0 0.4rem 0', fontSize: '0.75rem', fontWeight: 800, color: '#f43f5e' }}>Zona de Peligro</p>
-                      <p style={{ margin: '0 0 0.8rem 0', fontSize: '0.7rem', color: themeStyles.subTextColor }}>Cancelar tu suscripción desactivará tu cuenta de inmediato.</p>
-                      <button
-                        onClick={handleCancelBusiness}
-                        style={{
-                          width: '100%', padding: '0.6rem', borderRadius: '8px', border: 'none',
-                          background: '#f43f5e', color: '#ffffff', fontSize: '0.75rem', fontWeight: 800, cursor: 'pointer'
-                        }}
-                      >
-                        Cancelar Suscripción y Apagar Negocio
-                      </button>
-                    </div>
-
                   </div>
 
+                  {/* Botón Inferior */}
                   <div style={{ display: 'flex', gap: '1rem' }}>
                     <button
                       onClick={() => setShowVaultDataModal(false)}

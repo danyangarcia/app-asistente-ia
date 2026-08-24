@@ -14,7 +14,7 @@ interface Subscription {
   current_period_end: string;
   card_last_four?: string;
   card_brand?: string;
-  plans: Plan | Plan[];
+  plans: Plan | Plan[] | null;
 }
 
 interface BillingPeriod {
@@ -30,7 +30,12 @@ interface BusinessData {
   billing_periods?: BillingPeriod[];
 }
 
-export default function ModalFacturacion({ onClose, slug = "tacos-luis" }: { onClose: () => void; slug?: string }) {
+interface ModalFacturacionProps {
+  onClose: () => void;
+  slug?: string;
+}
+
+export default function ModalFacturacion({ onClose, slug = "tacos-luis" }: ModalFacturacionProps) {
   const supabase = createClient();
   const [loading, setLoading] = useState(true);
   const [procesandoPago, setProcesandoPago] = useState(false);
@@ -43,7 +48,10 @@ export default function ModalFacturacion({ onClose, slug = "tacos-luis" }: { onC
   });
   
   const [historial, setHistorial] = useState<BillingPeriod[]>([]);
-  const [tarjeta, setTarjeta] = useState<{ ultimos4: string | null; marca: string }>({ ultimos4: null, marca: "VISA / MC" });
+  const [tarjeta, setTarjeta] = useState<{ ultimos4: string | null; marca: string }>({ 
+    ultimos4: null, 
+    marca: "VISA / MC" 
+  });
 
   useEffect(() => {
     async function cargarDatos() {
@@ -95,7 +103,12 @@ export default function ModalFacturacion({ onClose, slug = "tacos-luis" }: { onC
             marca: activeSub.card_brand || "Tarjeta de Crédito/Débito"
           });
         } else {
-          setDatosPlan({ nombre: "Sin Plan", precio: "0", fechaRenovacion: "No configurada", estado: "Inactiva" });
+          setDatosPlan({ 
+            nombre: "Sin Plan", 
+            precio: "0", 
+            fechaRenovacion: "No configurada", 
+            estado: "Inactiva" 
+          });
         }
 
         if (business?.billing_periods) {
@@ -109,7 +122,7 @@ export default function ModalFacturacion({ onClose, slug = "tacos-luis" }: { onC
     }
 
     cargarDatos();
-  }, [slug]);
+  }, [slug, supabase]);
 
   const handleIniciarPago = async () => {
     setProcesandoPago(true);
@@ -154,10 +167,14 @@ export default function ModalFacturacion({ onClose, slug = "tacos-luis" }: { onC
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
       <div className="bg-[#151517] border border-zinc-800 rounded-2xl w-full max-w-4xl p-8 relative shadow-2xl flex flex-col md:flex-row gap-6">
         
-        <button onClick={onClose} className="absolute top-4 right-4 p-2 bg-zinc-800 hover:bg-zinc-700 rounded-full text-zinc-400 transition">
+        <button 
+          onClick={onClose} 
+          className="absolute top-4 right-4 p-2 bg-zinc-800 hover:bg-zinc-700 rounded-full text-zinc-400 transition"
+        >
           ✕
         </button>
 
+        {/* Columna Izquierda: Plan y Tarjeta */}
         <div className="flex-1 space-y-6">
           <div className="mb-6">
             <h2 className="text-2xl font-bold text-white flex items-center gap-2">
@@ -166,6 +183,7 @@ export default function ModalFacturacion({ onClose, slug = "tacos-luis" }: { onC
             <p className="text-zinc-400 text-sm mt-1">Gestiona tu método de pago y tu plan mensual.</p>
           </div>
 
+          {/* Tarjeta de Plan Activo */}
           <div className="bg-[#1c1c1e] border border-zinc-800 rounded-xl p-5">
             <div className="flex justify-between items-start mb-4">
               <div>
@@ -198,12 +216,16 @@ export default function ModalFacturacion({ onClose, slug = "tacos-luis" }: { onC
               >
                 {procesandoPago ? "Cargando..." : "Cambiar Plan"}
               </button>
-              <button onClick={handleCancelarPlan} className="flex-1 bg-red-500/10 hover:bg-red-500/20 text-red-500 text-sm py-2 rounded-lg font-medium transition">
+              <button 
+                onClick={handleCancelarPlan} 
+                className="flex-1 bg-red-500/10 hover:bg-red-500/20 text-red-500 text-sm py-2 rounded-lg font-medium transition"
+              >
                 Cancelar Plan
               </button>
             </div>
           </div>
 
+          {/* Tarjeta de Método de Pago */}
           <div className="bg-[#1c1c1e] border border-zinc-800 rounded-xl p-5">
             <p className="text-xs text-zinc-500 font-bold mb-3 uppercase">Método de pago</p>
             
@@ -217,22 +239,32 @@ export default function ModalFacturacion({ onClose, slug = "tacos-luis" }: { onC
                   •••• •••• •••• {tarjeta.ultimos4}
                 </p>
                 <div className="flex gap-3 mt-2">
-                  <button onClick={handleIniciarPago} className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white text-xs py-2 rounded-lg font-medium transition">
+                  <button 
+                    onClick={handleIniciarPago} 
+                    className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white text-xs py-2 rounded-lg font-medium transition"
+                  >
                     Actualizar Tarjeta
                   </button>
-                  <button onClick={handleEliminarTarjeta} className="bg-red-500/10 hover:bg-red-500/20 text-red-500 text-xs px-4 py-2 rounded-lg font-medium transition">
+                  <button 
+                    onClick={handleEliminarTarjeta} 
+                    className="bg-red-500/10 hover:bg-red-500/20 text-red-500 text-xs px-4 py-2 rounded-lg font-medium transition"
+                  >
                     Eliminar
                   </button>
                 </div>
               </div>
             ) : (
-              <button onClick={handleIniciarPago} className="w-full bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 border-dashed text-sm py-6 rounded-lg font-medium transition flex justify-center items-center gap-2">
+              <button 
+                onClick={handleIniciarPago} 
+                className="w-full bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 border-dashed text-sm py-6 rounded-lg font-medium transition flex justify-center items-center gap-2"
+              >
                 + Agregar Método de Pago
               </button>
             )}
           </div>
         </div>
 
+        {/* Columna Derecha: Historial y Facturas */}
         <div className="flex-1 bg-[#1c1c1e] border border-zinc-800 rounded-xl p-6 flex flex-col h-full">
           <h3 className="text-xs font-bold text-zinc-500 uppercase mb-4">Historial y Comprobantes</h3>
           
@@ -268,7 +300,10 @@ export default function ModalFacturacion({ onClose, slug = "tacos-luis" }: { onC
           </div>
           
           <div className="pt-4 mt-4 border-t border-zinc-800">
-            <button onClick={onClose} className="w-full bg-zinc-800 hover:bg-zinc-700 text-white font-medium py-3 rounded-lg transition">
+            <button 
+              onClick={onClose} 
+              className="w-full bg-zinc-800 hover:bg-zinc-700 text-white font-medium py-3 rounded-lg transition"
+            >
               CERRAR VENTANA
             </button>
           </div>
