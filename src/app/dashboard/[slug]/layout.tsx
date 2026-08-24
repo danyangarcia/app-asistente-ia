@@ -74,7 +74,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     modalBorder: isDark ? 'rgba(255,255,255,0.1)' : '#cbd5e1',
   }), [isDark])
 
-  // Carga de datos del negocio desde Supabase
+  // Carga de datos del negocio desde Supabase utilizando la columna 'enlace del panel'
   useEffect(() => {
     let isMounted = true
 
@@ -745,7 +745,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   borderRadius: '12px',
                   padding: '1rem'
                 }}>
-<p style={{ margin: '0 0 0.3rem 0', fontSize: '0.7rem', color: themeStyles.subTextColor, textTransform: 'uppercase', fontWeight: 700 }}>                    MERCADO PAGO ACCESS TOKEN
+                  <p style={{ margin: '0 0 0.3rem 0', fontSize: '0.7rem', color: themeStyles.subTextColor, textTransform: 'uppercase', fontWeight: 700 }}>
+                    MERCADO PAGO ACCESS TOKEN
                   </p>
                   <code style={{
                     fontSize: '0.78rem',
@@ -765,7 +766,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   borderRadius: '12px',
                   padding: '1rem'
                 }}>
-<p style={{ margin: '0 0 0.3rem 0', fontSize: '0.7rem', color: themeStyles.subTextColor, textTransform: 'uppercase', fontWeight: 700 }}>                    ESTADO DE INTEGRACIÓN
+                  <p style={{ margin: '0 0 0.3rem 0', fontSize: '0.7rem', color: themeStyles.subTextColor, textTransform: 'uppercase', fontWeight: 700 }}>
+                    ESTADO DE INTEGRACIÓN
                   </p>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.2rem' }}>
                     <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981' }} />
