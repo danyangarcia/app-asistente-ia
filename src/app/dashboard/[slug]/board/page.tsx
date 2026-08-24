@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { createClient } from '@/lib/supabaseClient'
 import { usePathname } from 'next/navigation'
+import ModalFacturacion from '@/components/BillingModal'
 
 export interface Order {
   id: string
@@ -39,6 +40,7 @@ export default function BoardPage() {
   const [razon, setRazon] = useState('')
   
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
+  const [mostrarFacturacion, setMostrarFacturacion] = useState(false)
   const [mounted, setMounted] = useState(false)
 
   // Estado del tema dinámico
@@ -223,11 +225,27 @@ export default function BoardPage() {
 
   return (
     <div style={{ color: styles.textPrimary, maxWidth: '900px', margin: '0 auto', paddingBottom: '3rem', transition: 'color 0.3s ease' }}>
-      <header style={{ marginBottom: '2rem', borderBottom: `1px solid ${styles.headerBorder}`, paddingBottom: '1rem', transition: 'border-color 0.3s ease' }}>
-        <h2 style={{ fontSize: '1.4rem', fontWeight: 'bold', margin: 0 }}>Pedidos y Solicitudes en Vivo</h2>
-        <p style={{ color: styles.textSecondary, fontSize: '0.85rem', margin: '0.2rem 0 0 0' }}>
-          Panel simplificado de la actividad de tu negocio ({slug}). Muestra pedidos de las últimas 24 horas.
-        </p>
+      <header style={{ marginBottom: '2rem', borderBottom: `1px solid ${styles.headerBorder}`, paddingBottom: '1rem', transition: 'border-color 0.3s ease', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <h2 style={{ fontSize: '1.4rem', fontWeight: 'bold', margin: 0 }}>Pedidos y Solicitudes en Vivo</h2>
+          <p style={{ color: styles.textSecondary, fontSize: '0.85rem', margin: '0.2rem 0 0 0' }}>
+            Panel simplificado de la actividad de tu negocio ({slug}). Muestra pedidos de las últimas 24 horas.
+          </p>
+        </div>
+        <button 
+          onClick={() => setMostrarFacturacion(true)}
+          style={{
+            background: '#2563eb',
+            color: '#ffffff',
+            border: 'none',
+            padding: '0.5rem 1rem',
+            borderRadius: '0.5rem',
+            fontSize: '0.85rem',
+            fontWeight: '600',
+            cursor: 'pointer'
+          }}>
+          💳 Planes y Facturación
+        </button>
       </header>
 
       {loading ? (
@@ -375,6 +393,14 @@ export default function BoardPage() {
             </div>
           )}
         </div>
+      )}
+
+      {/* MODAL FACTURACIÓN / PLANES */}
+      {mostrarFacturacion && (
+        <ModalFacturacion 
+          onClose={() => setMostrarFacturacion(false)} 
+          slug={slug} 
+        />
       )}
 
       {/* PORTAL MODAL DETALLES */}
