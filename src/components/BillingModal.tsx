@@ -1,190 +1,536 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { createClient } from '@/lib/supabaseClient';
 
+const supabase = createClient();
+
 interface BillingModalProps {
-  onClose: () => void;
   slug: string;
+  onClose: () => void;
 }
 
-export default function BillingModal({ onClose, slug }: BillingModalProps) {
-  const supabase = createClient();
-  const [loading, setLoading] = useState(true);
-  const [business, setBusiness] = useState<any>(null);
-  const [subscription, setSubscription] = useState<any>(null);
-  const [plan, setPlan] = useState<any>(null);
-  const [history, setHistory] = useState<any[]>([]);
-  const [usedMinutes, setUsedMinutes] = useState<number>(0);
+interface PlanOption {
+  id: string;
+  name: string;
+  price: string;
+  minutes: string;
+  badge?: string;
+}
 
+const PLAN_OPTIONS: PlanOption[] = [
+  { id: 'normal', name: 'NORMAL', price: '$499 MXN/mes', minutes: '500 min incluidos' },
+  { id: 'pro', name: 'PRO', price: '$999 MXN/mes', minutes: '1,200 min incluidos', badge: 'RECOMENDADO' },
+  { id: 'premium', name: 'PREMIUM', price: '$1,899 MXN/mes', minutes: '3,000 min incluidos' },
+];
+
+export default function BillingModal({ slug, onClose }: BillingModalProps) {
+  // Detección de Tema
+  const [isDark, setIsDark] = useState(true);
   useEffect(() => {
-    async function loadBillingData() {
-      if (!slug) return;
-      setLoading(true);
+    const savedTheme = localStorage.getItem('dashboard_theme');
+    if (savedTheme) setIsDark(savedTheme === 'dark');
+  }, []);
 
-      try {
-        // 1. Obtener datos del negocio
-        const { data: bData, error: bError } = await supabase
-          .from('businesses')
-          .select('*')
-          .eq('enlace del panel', slug)
-          .single();
+  // Vistas: 'main' | 'change_plan' | 'cancel_confirm' | 'add_card'
+  const [currentView, setCurrentView] = useState<'main' | 'change_plan' | 'cancel_confirm' | 'add_card'>('main');
 
-        if (bError || !bData) {
-          console.error("Error al buscar el negocio:", bError);
-          setLoading(false);
-          return;
-        }
+  // Estados de datos
+  const [loading, setLoading] = useState(false);
+  const [currentPlan, setCurrentPlan] = useState({
+    name: 'DEMO',
+    price: '$0 MXN/mes',
+    consumedMin: 3,
+    totalMin: 200,
+    status: 'ACTIVE'
+  });
 
-        setBusiness(bData);
+  const [card, setCard] = useState<{ last4: string; brand: string } | null>({
+    last4: '4242',
+    brand: 'Visa'
+  });
 
-        // 2. Obtener la suscripción activa
-        const { data: subData } = await supabase
-          .from('subscriptions')
-          .select('*')
-          .eq('business_id', bData.id)
-          .maybeSingle();
+  const [history, setHistory] = useState([
+    { id: '1', period: '22/8/2026 - 22/9/2026', minutes: '200 min', amount: '$0.00 MXN', status: 'Pagado' },
+    { id: '2', period: '22/7/2026 - 22/8/2026', minutes: '200 min', amount: '$0.00 MXN', status: 'Pagado' }
+  ]);
 
-        if (subData) {
-          setSubscription(subData);
+  // Formulario Tarjeta
+  const [cardForm, setCardForm] = useState({ number: '', exp: '', cvv: '', name: '' });
+  const [cardError, setCardError] = useState('');
 
-          // 3. Obtener el plan
-          if (subData.plan_id) {
-            const { data: planData } = await supabase
-              .from('plans')
-              .select('*')
-              .eq('id', subData.plan_id)
-              .single();
-            if (planData) setPlan(planData);
-          }
-        }
+  // Estilos visuales acordes al modal de Ajustes
+  const theme = {
+    modalBg: isDark ? '#121216' : '#ffffff',
+    cardBg: isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(241, 245, 249, 0.8)',
+    border: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(203, 213, 225, 0.8)',
+    textPrimary: isDark ? '#ffffff' : '#0f172a',
+    textSecondary: isDark ? 'rgba(255, 255, 255, 0.45)' : '#64748b',
+    btnBg: isDark ? 'rgba(255, 255, 255, 0.06)' : '#e2e8f0',
+    btnHover: isDark ? 'rgba(255, 255, 255, 0.12)' : '#cbd5e1'
+  };
 
-        // 4. Historial de facturación
-        const { data: periodsData } = await supabase
-          .from('billing_periods')
-          .select('*')
-          .eq('business_id', bData.id)
-          .order('created_at', { ascending: false });
-
-        if (periodsData) setHistory(periodsData);
-
-        // 5. Minutos consumidos
-        const { data: callsData } = await supabase
-          .from('vapi_calls_log')
-          .select('duration_minutes')
-          .eq('business_id', bData.id);
-
-        if (callsData) {
-          const totalMins = callsData.reduce((acc, call) => acc + (call.duration_minutes || 0), 0);
-          setUsedMinutes(Math.round(totalMins));
-        }
-
-      } catch (err) {
-        console.error("Error inesperado:", err);
-      } finally {
-        setLoading(false);
-      }
+  // Guardar cambio de plan
+  const handleSelectPlan = async (plan: PlanOption) => {
+    setLoading(true);
+    // Actualización a Supabase
+    if (slug) {
+      await supabase
+        .from('businesses')
+        .update({ plan_actual: plan.name, precio_plan: plan.price })
+        .eq('enlace del panel', slug);
     }
 
-    loadBillingData();
-  }, [slug]);
+    setCurrentPlan(prev => ({
+      ...prev,
+      name: plan.name,
+      price: plan.price,
+      totalMin: plan.id === 'normal' ? 500 : plan.id === 'pro' ? 1200 : 3000,
+      status: 'ACTIVE'
+    }));
+    setLoading(false);
+    setCurrentView('main');
+  };
 
-  const totalAllowedMinutes = (plan?.included_minutes || 0);
+  // Cancelar plan / Desactivar negocio para Vapi
+  const handleCancelBilling = async () => {
+    setLoading(true);
+    if (slug) {
+      await supabase
+        .from('businesses')
+        .update({ 'Cuenta Activa': false, plan_actual: 'SIN PLAN' })
+        .eq('enlace del panel', slug);
+    }
+    setCurrentPlan(prev => ({ ...prev, name: 'CANCELADO', status: 'INACTIVE', price: '$0 MXN' }));
+    setLoading(false);
+    setCurrentView('main');
+  };
+
+  // Guardar nueva tarjeta
+  const handleAddCard = (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanNum = cardForm.number.replace(/\s/g, '');
+    if (cleanNum.length < 16 || cardForm.cvv.length < 3) {
+      setCardError('Tarjeta inválida o rechazada por el banco.');
+      return;
+    }
+    setCardError('');
+    setCard({
+      last4: cleanNum.slice(-4),
+      brand: cleanNum.startsWith('4') ? 'Visa' : 'Mastercard'
+    });
+    setCardForm({ number: '', exp: '', cvv: '', name: '' });
+    setCurrentView('main');
+  };
+
+  // Simular descarga de PDF de factura
+  const handleDownloadPDF = (period: string) => {
+    const content = `FACTURA DE SERVICIO - TACOS LUIS\nPeriodo: ${period}\nEstado: PAGADO\nRFC: XAXX010101000`;
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Factura_${period.replace(/\//g, '-')}.pdf`;
+    a.click();
+  };
 
   return (
-    <div style={{
-      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-      backgroundColor: 'rgba(0,0,0,0.7)', zIndex: 9999,
-      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem'
-    }}>
-      <motion.div 
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.95 }}
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 100,
+        background: isDark ? 'rgba(0,0,0,0.82)' : 'rgba(15, 23, 42, 0.35)',
+        backdropFilter: 'blur(10px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem'
+      }}
+    >
+      <motion.div
+        initial={{ scale: 0.95, y: 10 }}
+        animate={{ scale: 1, y: 0 }}
+        exit={{ scale: 0.95, y: 10 }}
         style={{
-          background: '#121212', border: '1px solid #2a2a2a', borderRadius: '16px',
-          width: '100%', maxWidth: '600px', padding: '2rem', color: '#fff', maxHeight: '90vh', overflowY: 'auto'
+          background: theme.modalBg,
+          border: `1px solid ${theme.border}`,
+          borderRadius: '20px',
+          padding: '2rem',
+          width: '100%',
+          maxWidth: '850px',
+          position: 'relative',
+          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.4)',
+          color: theme.textPrimary,
+          fontFamily: "'Inter', system-ui, sans-serif"
         }}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-          <h2 style={{ margin: 0, fontSize: '1.4rem' }}>
-            Facturación — <span style={{ color: '#3b82f6' }}>{business?.["Nombre del negocio"] || slug}</span>
+        {/* Botón Cerrar */}
+        <button
+          onClick={onClose}
+          style={{
+            position: 'absolute', top: '1.2rem', right: '1.2rem',
+            background: 'transparent', border: 'none', color: theme.textSecondary,
+            fontSize: '1.2rem', cursor: 'pointer'
+          }}
+        >
+          ✕
+        </button>
+
+        {/* Encabezado */}
+        <div style={{ marginBottom: '1.8rem' }}>
+          <h2 style={{ margin: 0, fontSize: '1.35rem', fontWeight: 800, letterSpacing: '-0.02em' }}>
+            Facturación — <span style={{ color: '#10b981' }}>{slug?.toUpperCase()}</span>
           </h2>
-          <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: '#888', fontSize: '1.2rem', cursor: 'pointer' }}>✕</button>
+          <p style={{ margin: '0.3rem 0 0 0', fontSize: '0.78rem', color: theme.textSecondary }}>
+            Gestiona tu suscripción, método de pago e historial de facturación fiscal.
+          </p>
         </div>
 
-        {loading ? (
-          <p style={{ color: '#888', textAlign: 'center', padding: '2rem 0' }}>Cargando información de Supabase...</p>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+        {/* VISTA PRINCIPAL */}
+        {currentView === 'main' && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.2rem' }}>
             
-            <div style={{ background: '#1e1e1e', padding: '1.25rem', borderRadius: '12px', border: '1px solid #333' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-                <span style={{ color: '#aaa', fontSize: '0.9rem' }}>Plan Actual</span>
-                <span style={{ 
-                  background: subscription?.status === 'active' ? '#16a34a22' : '#dc262622',
-                  color: subscription?.status === 'active' ? '#4ade80' : '#f87171',
-                  padding: '2px 8px', borderRadius: '4px', fontSize: '0.8rem', textTransform: 'uppercase'
-                }}>
-                  {subscription?.status || 'Sin plan'}
-                </span>
-              </div>
+            {/* COLUMNA IZQUIERDA: PLAN + TARJETA */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
               
-              <div style={{ fontSize: '1.8rem', fontWeight: 'bold', marginBottom: '1rem' }}>
-                {plan?.name || 'PLAN NO ASIGNADO'} 
-                <span style={{ fontSize: '1rem', color: '#888', fontWeight: 'normal' }}>
-                  {plan ? ` — $${plan.price_mxn} MXN/mes` : ''}
+              {/* SECCIÓN 1: PLAN ACTUAL */}
+              <div style={{
+                background: theme.cardBg, border: `1px solid ${theme.border}`,
+                borderRadius: '14px', padding: '1.2rem'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.8rem' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: theme.textSecondary, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Plan Actual
+                  </span>
+                  <span style={{
+                    fontSize: '0.65rem', fontWeight: 800, padding: '0.2rem 0.6rem', borderRadius: '100px',
+                    background: currentPlan.status === 'ACTIVE' ? 'rgba(16,185,129,0.15)' : 'rgba(244,63,94,0.15)',
+                    color: currentPlan.status === 'ACTIVE' ? '#10b981' : '#f43f5e',
+                    border: `1px solid ${currentPlan.status === 'ACTIVE' ? 'rgba(16,185,129,0.3)' : 'rgba(244,63,94,0.3)'}`
+                  }}>
+                    {currentPlan.status}
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.6rem', marginBottom: '0.8rem' }}>
+                  <span style={{ fontSize: '1.8rem', fontWeight: 900, letterSpacing: '-0.03em' }}>{currentPlan.name}</span>
+                  <span style={{ fontSize: '0.85rem', color: theme.textSecondary, fontWeight: 600 }}>{currentPlan.price}</span>
+                </div>
+
+                {/* Barra de Minutos */}
+                <div style={{ marginBottom: '1.2rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: theme.textSecondary, marginBottom: '0.4rem', fontWeight: 600 }}>
+                    <span>Minutos Consumidos</span>
+                    <span>{currentPlan.consumedMin} / {currentPlan.totalMin} min</span>
+                  </div>
+                  <div style={{ width: '100%', height: '6px', background: isDark ? 'rgba(255,255,255,0.08)' : '#cbd5e1', borderRadius: '10px', overflow: 'hidden' }}>
+                    <div style={{
+                      width: `${(currentPlan.consumedMin / currentPlan.totalMin) * 100}%`,
+                      height: '100%', background: '#3b82f6', borderRadius: '10px'
+                    }} />
+                  </div>
+                </div>
+
+                {/* Botones Cambiar / Cancelar */}
+                <div style={{ display: 'flex', gap: '0.6rem' }}>
+                  <button
+                    onClick={() => setCurrentView('change_plan')}
+                    style={{
+                      flex: 1, padding: '0.55rem', borderRadius: '100px', border: `1px solid ${theme.border}`,
+                      background: theme.btnBg, color: theme.textPrimary, fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer'
+                    }}
+                  >
+                    Cambiar Plan
+                  </button>
+                  <button
+                    onClick={() => setCurrentView('cancel_confirm')}
+                    style={{
+                      padding: '0.55rem 0.9rem', borderRadius: '100px', border: '1px solid rgba(244,63,94,0.3)',
+                      background: 'rgba(244,63,94,0.1)', color: '#f43f5e', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer'
+                    }}
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+
+              {/* SECCIÓN 2: MÉTODO DE PAGO */}
+              <div style={{
+                background: theme.cardBg, border: `1px solid ${theme.border}`,
+                borderRadius: '14px', padding: '1.2rem'
+              }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: theme.textSecondary, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Método de Pago Guardado
                 </span>
-              </div>
 
-              <div style={{ marginTop: '1rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '0.4rem' }}>
-                  <span style={{ color: '#aaa' }}>Minutos Consumidos</span>
-                  <span><strong>{usedMinutes}</strong> / {totalAllowedMinutes} min</span>
-                </div>
-                <div style={{ background: '#333', height: '8px', borderRadius: '4px', overflow: 'hidden' }}>
-                  <div style={{ width: `${Math.min(100, (usedMinutes / (totalAllowedMinutes || 1)) * 100)}%`, background: '#3b82f6', height: '100%' }} />
-                </div>
-              </div>
-            </div>
-
-            <div style={{ background: '#1e1e1e', padding: '1.25rem', borderRadius: '12px', border: '1px solid #333' }}>
-              <span style={{ color: '#aaa', fontSize: '0.9rem', display: 'block', marginBottom: '0.5rem' }}>Método de Pago Guardado</span>
-              {subscription?.card_last_four ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <span>💳 {subscription.card_brand?.toUpperCase() || 'Tarjeta'} terminada en <strong>**** {subscription.card_last_four}</strong></span>
-                </div>
-              ) : (
-                <p style={{ color: '#666', margin: 0, fontSize: '0.9rem' }}>No hay tarjeta vinculada en Mercado Pago</p>
-              )}
-            </div>
-
-            <div>
-              <h3 style={{ fontSize: '1rem', color: '#aaa', marginBottom: '0.75rem' }}>Historial de Períodos</h3>
-              {history.length === 0 ? (
-                <p style={{ color: '#666', fontSize: '0.9rem' }}>Sin historial de períodos registrado.</p>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  {history.map((period) => (
-                    <div key={period.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#1a1a1a', padding: '0.75rem 1rem', borderRadius: '8px', border: '1px solid #282828' }}>
-                      <div>
-                        <div style={{ fontSize: '0.85rem' }}>{new Date(period.start_date).toLocaleDateString()} - {new Date(period.end_date).toLocaleDateString()}</div>
-                        <div style={{ fontSize: '0.75rem', color: '#666' }}>Minutos incluidos: {period.included_minutes}</div>
+                <div style={{ margin: '0.8rem 0 1rem 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  {card ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.7rem' }}>
+                      <div style={{
+                        padding: '0.3rem 0.6rem', borderRadius: '6px', background: isDark ? '#1e293b' : '#e2e8f0',
+                        fontSize: '0.75rem', fontWeight: 800
+                      }}>
+                        {card.brand}
                       </div>
-                      {period.invoice_url && <a href={period.invoice_url} target="_blank" rel="noreferrer" style={{ color: '#3b82f6', fontSize: '0.8rem' }}>Factura</a>}
+                      <span style={{ fontSize: '0.9rem', fontWeight: 700, letterSpacing: '0.1em' }}>
+                        •••• •••• •••• {card.last4}
+                      </span>
                     </div>
-                  ))}
+                  ) : (
+                    <span style={{ fontSize: '0.8rem', color: theme.textSecondary, fontStyle: 'italic' }}>
+                      No hay tarjeta vinculada.
+                    </span>
+                  )}
                 </div>
-              )}
+
+                <div style={{ display: 'flex', gap: '0.6rem' }}>
+                  {card ? (
+                    <button
+                      onClick={() => setCard(null)}
+                      style={{
+                        width: '100%', padding: '0.55rem', borderRadius: '100px', border: '1px solid rgba(244,63,94,0.3)',
+                        background: 'rgba(244,63,94,0.08)', color: '#f43f5e', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer'
+                      }}
+                    >
+                      Eliminar Tarjeta
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => setCurrentView('add_card')}
+                      style={{
+                        width: '100%', padding: '0.55rem', borderRadius: '100px', border: '1px solid rgba(16,185,129,0.4)',
+                        background: 'rgba(16,185,129,0.15)', color: '#10b981', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer'
+                      }}
+                    >
+                      + Añadir Tarjeta
+                    </button>
+                  )}
+                </div>
+              </div>
+
             </div>
 
-            <button onClick={onClose} style={{ width: '100%', padding: '0.8rem', background: '#222', border: '1px solid #333', color: '#fff', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, marginTop: '1rem' }}>
-              Cerrar Ventana
+            {/* COLUMNA DERECHA: HISTORIAL DE PERÍODOS & FACTURAS */}
+            <div style={{
+              background: theme.cardBg, border: `1px solid ${theme.border}`,
+              borderRadius: '14px', padding: '1.2rem', display: 'flex', flexDirection: 'column'
+            }}>
+              <span style={{ fontSize: '0.75rem', fontWeight: 700, color: theme.textSecondary, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.8rem' }}>
+                Historial de Períodos
+              </span>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', flex: 1, overflowY: 'auto' }}>
+                {history.map((item) => (
+                  <div key={item.id} style={{
+                    background: isDark ? 'rgba(0,0,0,0.2)' : '#ffffff', border: `1px solid ${theme.border}`,
+                    borderRadius: '10px', padding: '0.8rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between'
+                  }}>
+                    <div>
+                      <p style={{ margin: 0, fontSize: '0.8rem', fontWeight: 700 }}>{item.period}</p>
+                      <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.7rem', color: theme.textSecondary }}>
+                        {item.minutes} incluidos — <span style={{ fontWeight: 700, color: theme.textPrimary }}>{item.amount}</span>
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={() => handleDownloadPDF(item.period)}
+                      style={{
+                        padding: '0.4rem 0.7rem', borderRadius: '8px', border: `1px solid ${theme.border}`,
+                        background: theme.btnBg, color: theme.textPrimary, fontSize: '0.68rem', fontWeight: 700,
+                        cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem'
+                      }}
+                      title="Descargar PDF para Facturación"
+                    >
+                      📄 PDF
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+          </div>
+        )}
+
+        {/* VISTA 2: SELECCIONAR PLAN */}
+        {currentView === 'change_plan' && (
+          <div>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 800, marginBottom: '1rem' }}>Selecciona un nuevo Plan</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.8rem', marginBottom: '1.5rem' }}>
+              {PLAN_OPTIONS.map((p) => (
+                <div key={p.id} style={{
+                  background: theme.cardBg, border: `1px solid ${p.badge ? '#10b981' : theme.border}`,
+                  borderRadius: '12px', padding: '1rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', position: 'relative'
+                }}>
+                  {p.badge && (
+                    <span style={{
+                      position: 'absolute', top: '-10px', right: '10px', background: '#10b981', color: '#fff',
+                      fontSize: '0.6rem', fontWeight: 800, padding: '0.15rem 0.5rem', borderRadius: '100px'
+                    }}>
+                      {p.badge}
+                    </span>
+                  )}
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 800 }}>{p.name}</h4>
+                    <p style={{ margin: '0.4rem 0 0 0', fontSize: '1.1rem', fontWeight: 900, color: '#10b981' }}>{p.price}</p>
+                    <p style={{ margin: '0.4rem 0 1rem 0', fontSize: '0.72rem', color: theme.textSecondary }}>{p.minutes}</p>
+                  </div>
+                  <button
+                    onClick={() => handleSelectPlan(p)}
+                    disabled={loading}
+                    style={{
+                      width: '100%', padding: '0.55rem', borderRadius: '100px', border: 'none',
+                      background: p.badge ? '#10b981' : theme.btnBg, color: p.badge ? '#fff' : theme.textPrimary,
+                      fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer'
+                    }}
+                  >
+                    Elegir Plan
+                  </button>
+                </div>
+              ))}
+            </div>
+            <button onClick={() => setCurrentView('main')} style={{ background: 'transparent', border: 'none', color: theme.textSecondary, fontSize: '0.8rem', cursor: 'pointer' }}>
+              ← Volver
             </button>
           </div>
         )}
+
+        {/* VISTA 3: PREGUNTA CANCELAR / CAMBIAR */}
+        {currentView === 'cancel_confirm' && (
+          <div style={{ textAlign: 'center', padding: '1rem 0' }}>
+            <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>⚠️</div>
+            <h3 style={{ fontSize: '1.2rem', fontWeight: 800, margin: '0 0 0.5rem 0' }}>¿Deseas cambiar de plan o eliminarlo?</h3>
+            <p style={{ fontSize: '0.8rem', color: theme.textSecondary, maxWidth: '400px', margin: '0 auto 1.5rem auto' }}>
+              Al eliminar la suscripción, la cuenta del negocio pasará a inactiva y se detendrá el servicio automático.
+            </p>
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+              <button
+                onClick={() => setCurrentView('change_plan')}
+                style={{
+                  padding: '0.7rem 1.5rem', borderRadius: '100px', border: `1px solid ${theme.border}`,
+                  background: theme.btnBg, color: theme.textPrimary, fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer'
+                }}
+              >
+                Cambiar de Plan
+              </button>
+              <button
+                onClick={handleCancelBilling}
+                style={{
+                  padding: '0.7rem 1.5rem', borderRadius: '100px', border: 'none',
+                  background: '#f43f5e', color: '#ffffff', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer'
+                }}
+              >
+                Eliminar Suscripción
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* VISTA 4: AÑADIR TARJETA */}
+        {currentView === 'add_card' && (
+          <form onSubmit={handleAddCard} style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0 }}>Añadir Nueva Tarjeta</h3>
+            
+            <input
+              type="text"
+              placeholder="Nombre del Titular"
+              required
+              value={cardForm.name}
+              onChange={e => setCardForm({ ...cardForm, name: e.target.value })}
+              style={{
+                width: '100%', padding: '0.75rem', borderRadius: '8px', border: `1px solid ${theme.border}`,
+                background: isDark ? 'rgba(0,0,0,0.2)' : '#ffffff', color: theme.textPrimary, outline: 'none'
+              }}
+            />
+
+            <input
+              type="text"
+              placeholder="Número de Tarjeta (16 dígitos)"
+              maxLength={19}
+              required
+              value={cardForm.number}
+              onChange={e => setCardForm({ ...cardForm, number: e.target.value })}
+              style={{
+                width: '100%', padding: '0.75rem', borderRadius: '8px', border: `1px solid ${theme.border}`,
+                background: isDark ? 'rgba(0,0,0,0.2)' : '#ffffff', color: theme.textPrimary, outline: 'none'
+              }}
+            />
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.8rem' }}>
+              <input
+                type="text"
+                placeholder="MM/AA"
+                maxLength={5}
+                required
+                value={cardForm.exp}
+                onChange={e => setCardForm({ ...cardForm, exp: e.target.value })}
+                style={{
+                  padding: '0.75rem', borderRadius: '8px', border: `1px solid ${theme.border}`,
+                  background: isDark ? 'rgba(0,0,0,0.2)' : '#ffffff', color: theme.textPrimary, outline: 'none'
+                }}
+              />
+              <input
+                type="password"
+                placeholder="CVV"
+                maxLength={4}
+                required
+                value={cardForm.cvv}
+                onChange={e => setCardForm({ ...cardForm, cvv: e.target.value })}
+                style={{
+                  padding: '0.75rem', borderRadius: '8px', border: `1px solid ${theme.border}`,
+                  background: isDark ? 'rgba(0,0,0,0.2)' : '#ffffff', color: theme.textPrimary, outline: 'none'
+                }}
+              />
+            </div>
+
+            {cardError && <p style={{ color: '#f43f5e', fontSize: '0.75rem', margin: 0 }}>{cardError}</p>}
+
+            <div style={{ display: 'flex', gap: '0.8rem', marginTop: '0.5rem' }}>
+              <button
+                type="button"
+                onClick={() => setCurrentView('main')}
+                style={{
+                  flex: 1, padding: '0.75rem', borderRadius: '100px', border: `1px solid ${theme.border}`,
+                  background: theme.btnBg, color: theme.textPrimary, fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer'
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                style={{
+                  flex: 1, padding: '0.75rem', borderRadius: '100px', border: 'none',
+                  background: '#10b981', color: '#ffffff', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer'
+                }}
+              >
+                Guardar Tarjeta
+              </button>
+            </div>
+          </form>
+        )}
+
+        {/* Botón inferior único de cerrar */}
+        {currentView === 'main' && (
+          <button
+            onClick={onClose}
+            style={{
+              marginTop: '1.5rem',
+              width: '100%',
+              padding: '0.75rem',
+              borderRadius: '100px',
+              border: `1px solid ${theme.border}`,
+              background: theme.btnBg,
+              color: theme.textPrimary,
+              fontSize: '0.8rem',
+              fontWeight: 800,
+              textTransform: 'uppercase',
+              letterSpacing: '0.08em',
+              cursor: 'pointer'
+            }}
+          >
+            Cerrar Ventana
+          </button>
+        )}
       </motion.div>
-    </div>
+    </motion.div>
   );
 }
