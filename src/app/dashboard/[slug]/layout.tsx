@@ -1,11 +1,11 @@
-'use client'
+"use client";
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react'
-import { useRouter, usePathname } from 'next/navigation'
-import { motion, AnimatePresence } from 'framer-motion'
-import LoadingScreen from '@/components/LoadingScreen'
-import { createClient } from '@/lib/supabaseClient'
-
+import ModalFacturacion from "@/components/BillingModal";
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useRouter, usePathname } from 'next/navigation';
+import { motion, AnimatePresence } from 'framer-motion';
+import LoadingScreen from '@/components/LoadingScreen';
+import { createClient } from '@/lib/supabaseClient';
 // Instanciación única del cliente fuera del ciclo de renders
 const supabase = createClient()
 
