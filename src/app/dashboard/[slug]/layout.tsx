@@ -1,11 +1,12 @@
 "use client";
 
-import ModalFacturacion from "@/components/BillingModal";
+import BillingModal from "@/components/BillingModal";
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import LoadingScreen from '@/components/LoadingScreen';
 import { createClient } from '@/lib/supabaseClient';
+
 // Instanciación única del cliente fuera del ciclo de renders
 const supabase = createClient()
 
@@ -694,231 +695,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </AnimatePresence>
 
       {/* 3. Modal de Facturación y Suscripción (Dinámico) */}
-      <AnimatePresence>
-        {showVaultDataModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            style={{
-              position: 'fixed', inset: 0, zIndex: 120,
-              background: isDark ? 'rgba(0,0,0,0.85)' : 'rgba(15, 23, 42, 0.45)', 
-              backdropFilter: 'blur(10px)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem'
-            }}
-          >
-            <motion.div
-              initial={{ scale: 0.95, y: 15 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.95, y: 15 }}
-              style={{
-                background: themeStyles.modalBg,
-                border: `1px solid ${themeStyles.modalBorder}`,
-                borderRadius: '24px',
-                padding: '2.5rem',
-                width: '100%',
-                maxWidth: '850px',
-                maxHeight: '90vh',
-                overflowY: 'auto',
-                position: 'relative',
-                boxShadow: '0 30px 60px -12px rgba(0, 0, 0, 0.45)',
-                color: themeStyles.textColor
-              }}
-            >
-              {/* Botón Cerrar */}
-              <button
-                onClick={() => setShowVaultDataModal(false)}
-                style={{
-                  position: 'absolute', top: '1.5rem', right: '1.5rem',
-                  background: isDark ? 'rgba(255,255,255,0.05)' : '#e2e8f0', 
-                  border: 'none', borderRadius: '50%', width: '36px', height: '36px',
-                  color: themeStyles.textColor, fontSize: '1.1rem', cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center'
-                }}
-              >
-                ✕
-              </button>
-
-              {/* Encabezado */}
-              <div style={{ marginBottom: '2rem' }}>
-                <h2 style={{ margin: '0 0 0.4rem 0', fontSize: '1.6rem', fontWeight: 900, display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                  💳 Planes y Facturación
-                </h2>
-                <p style={{ margin: 0, fontSize: '0.85rem', color: themeStyles.subTextColor }}>
-                  Gestiona tu método de pago, consulta tu próximo día de cobro y descarga tus facturas.
-                </p>
-              </div>
-
-              {/* Grid Principal (2 Columnas) */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem' }}>
-                
-                {/* COLUMNA IZQUIERDA: Detalle del Plan y Próximo Cobro */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
-                  
-                  {/* Caja Plan Activo */}
-                  <div style={{
-                    background: isDark ? 'linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.01) 100%)' : '#ffffff',
-                    border: `1px solid ${themeStyles.cardBorder}`,
-                    borderRadius: '16px', padding: '1.5rem',
-                    boxShadow: isDark ? 'none' : '0 4px 15px rgba(0,0,0,0.03)'
-                  }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                      <div>
-                        <span style={{ fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#10b981' }}>
-                          ● Suscripción Activa
-                        </span>
-                        <h3 style={{ margin: '0.3rem 0 0 0', fontSize: '1.3rem', fontWeight: 800 }}>
-                          {business?.plan_nombre || business?.['Plan'] || 'Plan Negocio'}
-                        </h3>
-                      </div>
-                      <span style={{ fontSize: '1.2rem', fontWeight: 900 }}>
-                        ${business?.plan_precio || business?.['Precio Plan'] || '0'}
-                        <span style={{ fontSize: '0.75rem', fontWeight: 500, color: themeStyles.subTextColor }}>/mes</span>
-                      </span>
-                    </div>
-
-                    <hr style={{ border: 'none', borderTop: `1px solid ${themeStyles.modalBorder}`, margin: '1.2rem 0' }} />
-
-                    {/* Fecha de Renovación Real */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div>
-                        <p style={{ margin: 0, fontSize: '0.7rem', color: themeStyles.subTextColor, textTransform: 'uppercase', fontWeight: 700 }}>
-                          Próxima Fecha de Cobro
-                        </p>
-                        <p style={{ margin: '0.2rem 0 0 0', fontSize: '1rem', fontWeight: 800 }}>
-                          {business?.fecha_renovacion || business?.['Fecha Cobro'] || 'No configurada'}
-                        </p>
-                      </div>
-                      <div style={{
-                        background: isDark ? 'rgba(16,185,129,0.15)' : '#ecfdf5',
-                        color: '#059669', padding: '0.4rem 0.8rem', borderRadius: '10px',
-                        fontSize: '0.75rem', fontWeight: 800
-                      }}>
-                        Al día
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Método de Pago */}
-                  <div style={{
-                    background: isDark ? 'rgba(255,255,255,0.02)' : '#ffffff',
-                    border: `1px solid ${themeStyles.cardBorder}`,
-                    borderRadius: '16px', padding: '1.5rem',
-                    boxShadow: isDark ? 'none' : '0 4px 15px rgba(0,0,0,0.03)'
-                  }}>
-                    <p style={{ margin: '0 0 1rem 0', fontSize: '0.75rem', color: themeStyles.subTextColor, textTransform: 'uppercase', fontWeight: 800 }}>
-                      Tarjeta Registrada
-                    </p>
-
-                    <div style={{
-                      background: isDark ? 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)' : 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
-                      borderRadius: '12px', padding: '1.2rem', color: '#ffffff',
-                      display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: '110px',
-                      boxShadow: '0 8px 20px rgba(0,0,0,0.15)'
-                    }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: '0.8rem', fontWeight: 800, letterSpacing: '0.1em' }}>VISA / MC</span>
-                        <span style={{ fontSize: '0.7rem', opacity: 0.7 }}>Débito / Crédito</span>
-                      </div>
-                      <div style={{ fontSize: '1.1rem', letterSpacing: '0.2em', fontWeight: 700 }}>
-                        •••• •••• •••• {business?.tarjeta_ultimos_digitos || business?.['Tarjeta'] || '****'}
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={() => {
-                        console.log('Cambiar método de pago')
-                      }}
-                      style={{
-                        marginTop: '1rem', width: '100%', padding: '0.7rem',
-                        borderRadius: '10px', border: `1px solid ${themeStyles.modalBorder}`,
-                        background: 'transparent', color: themeStyles.textColor,
-                        fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer',
-                        transition: 'all 0.2s ease'
-                      }}
-                    >
-                      + Actualizar Tarjeta
-                    </button>
-                  </div>
-
-                </div>
-
-                {/* COLUMNA DERECHA: Historial & Facturación Fiscal */}
-                <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '1.2rem' }}>
-                  
-                  <div style={{
-                    background: isDark ? 'rgba(255,255,255,0.02)' : '#ffffff',
-                    border: `1px solid ${themeStyles.cardBorder}`,
-                    borderRadius: '16px', padding: '1.5rem', flex: 1,
-                    boxShadow: isDark ? 'none' : '0 4px 15px rgba(0,0,0,0.03)'
-                  }}>
-                    <p style={{ margin: '0 0 1rem 0', fontSize: '0.75rem', color: themeStyles.subTextColor, textTransform: 'uppercase', fontWeight: 800 }}>
-                      Historial y Comprobantes Fiscales
-                    </p>
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
-                      
-                      {/* Recibo / Factura 1 */}
-                      <div style={{
-                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                        padding: '0.8rem 1rem', borderRadius: '10px',
-                        background: isDark ? 'rgba(255,255,255,0.03)' : '#f8fafc',
-                        border: `1px solid ${themeStyles.cardBorder}`
-                      }}>
-                        <div>
-                          <p style={{ margin: 0, fontSize: '0.8rem', fontWeight: 700 }}>
-                            {business?.fecha_ultimo_pago || 'Mes Actual'}
-                          </p>
-                          <p style={{ margin: '0.1rem 0 0 0', fontSize: '0.68rem', color: themeStyles.subTextColor }}>
-                            Suscripción Mensual
-                          </p>
-                        </div>
-
-                        <button
-                          onClick={() => {
-                            console.log('Solicitando comprobante fiscal')
-                          }}
-                          style={{
-                            fontSize: '0.7rem',
-                            color: '#10b981',
-                            fontWeight: 800,
-                            background: 'rgba(16,185,129,0.1)',
-                            border: '1px solid rgba(16,185,129,0.3)',
-                            padding: '0.4rem 0.8rem',
-                            borderRadius: '6px',
-                            cursor: 'pointer'
-                          }}
-                        >
-                          📄 Facturar / Descargar
-                        </button>
-                      </div>
-
-                    </div>
-                  </div>
-
-                  {/* Botón Inferior */}
-                  <div style={{ display: 'flex', gap: '1rem' }}>
-                    <button
-                      onClick={() => setShowVaultDataModal(false)}
-                      style={{
-                        flex: 1, padding: '0.85rem', borderRadius: '12px', border: 'none',
-                        background: isDark ? 'rgba(255,255,255,0.08)' : '#e2e8f0',
-                        color: themeStyles.textColor, fontSize: '0.8rem', fontWeight: 700,
-                        textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer'
-                      }}
-                    >
-                      Cerrar Ventana
-                    </button>
-                  </div>
-
-                </div>
-
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
+      {showVaultDataModal && (
+        <BillingModal 
+          slug={slug} 
+          onClose={() => setShowVaultDataModal(false)} 
+        />
+      )}
     </div>
   )
 }
