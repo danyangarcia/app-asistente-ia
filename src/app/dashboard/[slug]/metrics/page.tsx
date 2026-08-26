@@ -23,6 +23,14 @@ export default function MetricsPage() {
   const [vapiMetrics, setVapiMetrics] = useState<any>(null)
   const [themeMode, setThemeMode] = useState<'dark' | 'light'>('light')
 
+  // Estado para los datos de facturación en Supabase
+  const [billingData, setBillingData] = useState({
+    includedMinutes: 0,
+    rolloverMinutes: 0,
+    bonusMinutes: 0,
+    endDate: '' as string | null
+  })
+
   // Listener para sync de tema visual
   useEffect(() => {
     const savedTheme = localStorage.getItem('dashboard_theme') as 'dark' | 'light'
@@ -54,7 +62,7 @@ export default function MetricsPage() {
     secondaryMetricColor: isDark ? '#60a5fa' : '#2563eb',
   }), [isDark])
 
-  // Obtención de datos con AbortController para llamadas asíncronas
+  // Obtención de datos de Supabase y API de Métricas
   useEffect(() => {
     if (!slug) return
 
@@ -64,9 +72,10 @@ export default function MetricsPage() {
       setLoading(true)
 
       try {
-        const [{ data: ordersData }, resMetrics] = await Promise.all([
+        const [{ data: ordersData }, resMetrics, { data: businessData }] = await Promise.all([
           supabase.from('orders').select('*').eq('business_slug', slug),
-          fetch(`/api/metrics?business_slug=${slug}`, { signal: controller.signal })
+          fetch(`/api/metrics?business_slug=${slug}`, { signal: controller.signal }),
+          supabase.from('businesses').select('id').eq('enlace del panel', slug).maybeSingle()
         ])
 
         if (ordersData) setAllOrders(ordersData)
@@ -74,6 +83,25 @@ export default function MetricsPage() {
         if (resMetrics.ok) {
           const metricsData = await resMetrics.json()
           setVapiMetrics(metricsData)
+        }
+
+        // Obtener período activo de facturación para minutos y fecha de renovación
+        if (businessData?.id) {
+          const { data: activePeriod } = await supabase
+            .from('billing_periods')
+            .select('included_minutes, rollover_minutes, bonus_minutes, end_date')
+            .eq('business_id', businessData.id)
+            .eq('is_active', true)
+            .maybeSingle()
+
+          if (activePeriod) {
+            setBillingData({
+              includedMinutes: Number(activePeriod.included_minutes) || 0,
+              rolloverMinutes: Number(activePeriod.rollover_minutes) || 0,
+              bonusMinutes: Number(activePeriod.bonus_minutes) || 0,
+              endDate: activePeriod.end_date
+            })
+          }
         }
       } catch (err: any) {
         if (err.name !== 'AbortError') {
@@ -97,7 +125,6 @@ export default function MetricsPage() {
   const calcularDatosTab = useCallback((filtroTab: 'hoy' | 'semana' | 'mes', orders: any[]) => {
     const ahora = new Date()
     
-    // Comparación por fechas sin desfase UTC
     const esMismoDia = (d1: Date, d2: Date) => 
       d1.getFullYear() === d2.getFullYear() &&
       d1.getMonth() === d2.getMonth() &&
@@ -173,10 +200,23 @@ export default function MetricsPage() {
     return calcularDatosTab(tab, allOrders)
   }, [tab, allOrders, calcularDatosTab])
 
-  // Variables para la barra de consumo de IA
-  const totalMinutesPlan = vapiMetrics?.metrics?.balances?.included ?? 200
+  // --- CÁLCULOS REALES DE MINUTOS Y RENOVACIÓN ---
   const usedMinutes = vapiMetrics?.metrics?.usedMinutes ?? 3
+  const totalMinutesPlan = billingData.includedMinutes + billingData.rolloverMinutes + billingData.bonusMinutes
+  const availableMinutes = Math.max(0, totalMinutesPlan - usedMinutes)
   const percentageUsed = totalMinutesPlan > 0 ? Math.min(100, Math.max(0, (usedMinutes / totalMinutesPlan) * 100)) : 0
+
+  // Formateador para la fecha de renovación
+  const formatRenewalDate = (dateStr: string | null) => {
+    if (!dateStr) return '---'
+    const date = new Date(dateStr)
+    if (isNaN(date.getTime())) return '---'
+    return date.toLocaleDateString('es-ES', {
+      day: '2-digit',
+      month: 'long',
+      year: 'numeric'
+    })
+  }
 
   return (
     <div style={{ 
@@ -322,7 +362,7 @@ export default function MetricsPage() {
                 Minutos Disponibles IA
               </span>
               <div style={{ fontSize: '2.4rem', fontWeight: 900, color: themeStyles.secondaryMetricColor, margin: '0.4rem 0' }}>
-                {vapiMetrics?.metrics?.totalAvailableMinutes ?? 0} min
+                {availableMinutes} min
               </div>
               <div style={{ fontSize: '0.8rem', color: themeStyles.subTextColor, fontWeight: 500 }}>
                 Consumidos: {usedMinutes} min este periodo
@@ -428,15 +468,15 @@ export default function MetricsPage() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.88rem', padding: '0.6rem 0', borderBottom: `1px solid ${themeStyles.cardBorder}` }}>
                   <span style={{ color: themeStyles.subTextColor, fontWeight: 500 }}>Minutos del Plan:</span>
-                  <span style={{ color: themeStyles.textColor, fontWeight: 800 }}>{vapiMetrics?.metrics?.balances?.included ?? 0} min</span>
+                  <span style={{ color: themeStyles.textColor, fontWeight: 800 }}>{billingData.includedMinutes} min</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.88rem', padding: '0.6rem 0', borderBottom: `1px solid ${themeStyles.cardBorder}` }}>
                   <span style={{ color: themeStyles.subTextColor, fontWeight: 500 }}>Minutos Acumulados (Rollover):</span>
-                  <span style={{ color: themeStyles.textColor, fontWeight: 800 }}>{vapiMetrics?.metrics?.balances?.rollover ?? 0} min</span>
+                  <span style={{ color: themeStyles.textColor, fontWeight: 800 }}>{billingData.rolloverMinutes} min</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.88rem', padding: '0.6rem 0' }}>
                   <span style={{ color: themeStyles.subTextColor, fontWeight: 500 }}>Saldo Bonus / Promocional:</span>
-                  <span style={{ color: themeStyles.primaryMetricColor, fontWeight: 800 }}>{vapiMetrics?.metrics?.balances?.bonus ?? 0} min</span>
+                  <span style={{ color: themeStyles.primaryMetricColor, fontWeight: 800 }}>{billingData.bonusMinutes} min</span>
                 </div>
               </div>
             </motion.div>
@@ -463,7 +503,7 @@ export default function MetricsPage() {
                   Consumo General del Plan IA
                 </h3>
                 <p style={{ fontSize: '0.8rem', color: themeStyles.subTextColor, margin: 0, fontWeight: 500 }}>
-                  Próxima renovación de pago el <span style={{ color: themeStyles.textColor, fontWeight: 700 }}>01 de Septiembre, 2026</span>
+                  Próxima renovación de pago el <span style={{ color: themeStyles.textColor, fontWeight: 700 }}>{formatRenewalDate(billingData.endDate)}</span>
                 </p>
               </div>
               <div style={{ textAlign: 'right' }}>
