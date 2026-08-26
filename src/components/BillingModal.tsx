@@ -107,56 +107,6 @@ export default function BillingModal({ slug, onClose }: BillingModalProps) {
         nextChargeDate: billing.subscription?.currentPeriodEnd || null,
       });
       setHistory([]);
-      return;
-
-      // 1. Obtener datos del negocio
-      const { data: business, error: busError } = await supabase
-        .from('businesses')
-        .select('id, plan_actual, precio_plan, "Cuenta Activa"')
-        .eq('enlace del panel', slug)
-        .single();
-
-      if (busError || !business) throw busError || new Error('Negocio no encontrado');
-
-      // 2. Obtener la suscripción e información del plan
-      const { data: sub } = await supabase
-        .from('subscriptions')
-        .select('plan_id, plans(name, price, included_minutes)')
-        .eq('business_id', business!.id)
-        .maybeSingle();
-
-      // 3. Obtener periodos de facturación históricos
-      const { data: periods } = await supabase
-        .from('billing_periods')
-        .select('*')
-        .eq('business_id', business!.id)
-        .order('created_at', { ascending: false });
-
-      const activePeriod = periods?.[0];
-      const planInfo = sub?.plans as any;
-
-      setCurrentPlan({
-        name: business!.plan_actual || planInfo?.name || 'DEMO',
-        price: business!.precio_plan || planInfo?.price || '$0 MXN/mes',
-        consumedMin: activePeriod?.consumed_minutes || 0,
-        totalMin: Number(planInfo?.included_minutes) || 200,
-        status: business!['Cuenta Activa'] ? 'ACTIVE' : 'INACTIVE',
-        nextChargeDate: null,
-      });
-
-      if (periods?.length) {
-        setHistory(
-          periods!.map((p: any) => ({
-            id: p.id,
-            period: p.start_date && p.end_date 
-              ? `${new Date(p.start_date).toLocaleDateString()} - ${new Date(p.end_date).toLocaleDateString()}`
-              : 'Período Actual',
-            minutes: `${p.included_minutes || 0} min`,
-            amount: p.amount || '$0.00 MXN',
-            status: p.status || 'Pagado'
-          }))
-        );
-      }
     } catch (err) {
       console.error('Error al cargar datos de facturación:', err);
     } finally {
@@ -185,72 +135,13 @@ export default function BillingModal({ slug, onClose }: BillingModalProps) {
 
   // Guardar cambio de plan
   const handleSelectPlan = async (plan: PlanOption) => {
-    // El cambio de plan se implementarÃ¡ en backend en una etapa posterior.
+    // El cambio de plan se implementará en backend en una etapa posterior.
     void plan;
-    return;
-
-    setLoading(true);
-
-    try {
-      if (slug) {
-        const { data: businessData, error: busError } = await supabase
-          .from('businesses')
-          .select('id')
-          .eq('enlace del panel', slug)
-          .single();
-
-        if (busError || !businessData) throw busError;
-
-        const { data: planData, error: planError } = await supabase
-          .from('plans')
-          .select('id, included_minutes')
-          .ilike('name', plan.name)
-          .single();
-
-        if (planError || !planData) throw planError || new Error('Plan no encontrado');
-
-        const { error: subError } = await supabase
-          .from('subscriptions')
-          .update({ plan_id: planData!.id })
-          .eq('business_id', businessData!.id);
-
-        if (subError) throw subError;
-
-        await supabase
-          .from('businesses')
-          .update({ 
-            plan_actual: plan.name, 
-            precio_plan: plan.price,
-            'Cuenta Activa': true
-          })
-          .eq('id', businessData!.id);
-
-        await fetchBillingData();
-      }
-    } catch (err) {
-      console.error('Error al actualizar plan en Supabase:', err);
-    } finally {
-      setLoading(false);
-      setCurrentView('main');
-    }
   };
 
   // Cancelar plan / Desactivar negocio
   const handleCancelBilling = async () => {
-    // La cancelaciÃ³n se implementarÃ¡ en backend en una etapa posterior.
-    return;
-
-    setLoading(true);
-    if (slug) {
-      await supabase
-        .from('businesses')
-        .update({ 'Cuenta Activa': false, plan_actual: 'CANCELADO' })
-        .eq('enlace del panel', slug);
-
-      await fetchBillingData();
-    }
-    setLoading(false);
-    setCurrentView('main');
+    // La cancelación se implementará en backend en una etapa posterior.
   };
 
   // Guardar nueva tarjeta
@@ -368,7 +259,7 @@ export default function BillingModal({ slug, onClose }: BillingModalProps) {
                   <span style={{ fontSize: '0.85rem', color: theme.textSecondary, fontWeight: 600 }}>{currentPlan.price}</span>
                 </div>
                 <p style={{ margin: '-0.35rem 0 0.8rem', fontSize: '0.72rem', color: theme.textSecondary }}>
-                  PrÃ³xima renovaciÃ³n: {currentPlan.nextChargeDate ? new Date(currentPlan.nextChargeDate).toLocaleDateString('es-MX') : '---'}
+                  Próxima renovación: {currentPlan.nextChargeDate ? new Date(currentPlan.nextChargeDate).toLocaleDateString('es-MX') : '---'}
                 </p>
 
                 {/* Barra de Minutos */}

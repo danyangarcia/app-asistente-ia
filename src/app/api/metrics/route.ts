@@ -24,20 +24,11 @@ export async function GET(request: Request) {
     }
 
     const businessSlug = decodeURIComponent(rawParam).trim()
-    let { data: business } = await supabase
+    const { data: business } = await supabase
       .from('businesses')
       .select('id')
       .eq('"enlace del panel"', businessSlug)
       .maybeSingle()
-
-    if (!business) {
-      const { data: businessById } = await supabase
-        .from('businesses')
-        .select('id')
-        .eq('id', businessSlug)
-        .maybeSingle()
-      business = businessById
-    }
 
     if (!business) {
       return NextResponse.json({
@@ -75,17 +66,33 @@ export async function GET(request: Request) {
     const { data: ledger } = period?.id
       ? await supabase
           .from('usage_ledger')
-          .select('amount')
+          .select('amount, type')
           .eq('billing_period_id', period.id)
       : { data: [] }
 
     const includedMinutes = Number(period?.included_minutes) || 0
     const rolloverMinutes = Number(period?.rollover_minutes) || 0
     const bonusMinutes = Number(period?.bonus_minutes) || 0
+
+    // Consumos registrados en el ledger (movimientos negativos)
     const usedMinutes = (ledger || [])
       .filter((entry) => Number(entry.amount) < 0)
       .reduce((total, entry) => total + Math.abs(Number(entry.amount)), 0)
-    const totalMinutes = includedMinutes + rolloverMinutes + bonusMinutes
+
+    // Créditos adicionales en el ledger (movimientos positivos que no duplican la asignación inicial del período)
+    const extraCredits = (ledger || [])
+      .filter((entry) => {
+        const amount = Number(entry.amount)
+        if (amount <= 0) return false
+        const type = String(entry.type || '').toUpperCase()
+        if (type === 'MONTHLY_ALLOCATION' || type === 'INITIAL_ALLOCATION') {
+          return false
+        }
+        return true
+      })
+      .reduce((total, entry) => total + Number(entry.amount), 0)
+
+    const totalMinutes = includedMinutes + rolloverMinutes + bonusMinutes + extraCredits
 
     return NextResponse.json({
       subscription: subscription
