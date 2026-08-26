@@ -16,6 +16,9 @@ interface PlanOption {
   name: string;
   price: string;
   minutes: string;
+  priceNum: number;
+  includedMinutesNum: number;
+  isRecommended?: boolean;
 }
 
 interface HistoryItem {
@@ -34,8 +37,8 @@ export default function BillingModal({ slug, onClose }: BillingModalProps) {
     if (savedTheme) setIsDark(savedTheme === 'dark');
   }, []);
 
-  // Vistas: 'main' | 'change_plan' | 'cancel_confirm' | 'add_card'
-  const [currentView, setCurrentView] = useState<'main' | 'change_plan' | 'cancel_confirm' | 'add_card'>('main');
+  // Vistas: 'main' | 'change_plan' | 'confirm_plan' | 'cancel_confirm' | 'add_card'
+  const [currentView, setCurrentView] = useState<'main' | 'change_plan' | 'confirm_plan' | 'cancel_confirm' | 'add_card'>('main');
 
   // Estados de datos
   const [loading, setLoading] = useState(false);
@@ -49,6 +52,7 @@ export default function BillingModal({ slug, onClose }: BillingModalProps) {
     nextChargeDate: null as string | null,
   });
   const [availablePlans, setAvailablePlans] = useState<PlanOption[]>([]);
+  const [selectedPlanForConfirm, setSelectedPlanForConfirm] = useState<PlanOption | null>(null);
 
   const [card, setCard] = useState<{ last4: string; brand: string } | null>({
     last4: '4242',
@@ -82,20 +86,29 @@ export default function BillingModal({ slug, onClose }: BillingModalProps) {
           .from('plans')
           .select('id, name, price_mxn, included_minutes')
           .eq('is_active', true)
-          .order('created_at', { ascending: true }),
+          .gt('price_mxn', 0)
+          .order('price_mxn', { ascending: true }),
         fetch(`/api/metrics?business_slug=${encodeURIComponent(slug)}`),
       ]);
 
       if (plansError) throw plansError;
-      if (!metricsResponse.ok) throw new Error('No se pudo obtener el resumen de facturacion');
+      if (!metricsResponse.ok) throw new Error('No se pudo obtener el resumen de facturación');
 
       const billing = await metricsResponse.json();
+
+      // Filtrar planes comerciales activos (precio > 0 para excluir Demo/pruebas)
+      const commercialPlans = (plans || []).filter(p => Number(p.price_mxn) > 0);
+      const recommendedIndex = commercialPlans.length === 3 ? 1 : -1;
+
       setAvailablePlans(
-        (plans || []).map((plan) => ({
+        commercialPlans.map((plan, idx) => ({
           id: plan.id,
           name: plan.name,
           price: `$${Number(plan.price_mxn).toLocaleString('es-MX')} MXN/mes`,
           minutes: `${Number(plan.included_minutes).toLocaleString('es-MX')} min incluidos`,
+          priceNum: Number(plan.price_mxn),
+          includedMinutesNum: Number(plan.included_minutes),
+          isRecommended: idx === recommendedIndex,
         }))
       );
       setCurrentPlan({
@@ -133,15 +146,128 @@ export default function BillingModal({ slug, onClose }: BillingModalProps) {
     setCardForm(prev => ({ ...prev, exp: raw }));
   };
 
-  // Guardar cambio de plan
-  const handleSelectPlan = async (plan: PlanOption) => {
-    // El cambio de plan se implementará en backend en una etapa posterior.
-    void plan;
+  // Ejecutar cambio de plan en Supabase
+  const executePlanChange = async (plan: PlanOption) => {
+    if (!slug || !plan) return;
+    setLoading(true);
+    try {
+      // 1. Obtener datos del negocio a partir del slug
+      const { data: business, error: busError } = await supabase
+        .from('businesses')
+        .select('id')
+        .eq('"enlace del panel"', slug)
+        .maybeSingle();
+
+      if (busError || !business) throw busError || new Error('Negocio no encontrado');
+
+      // 2. Obtener datos completos del plan seleccionado directamente desde Supabase
+      const { data: planData, error: planError } = await supabase
+        .from('plans')
+        .select('id, name, price_mxn, included_minutes')
+        .eq('id', plan.id)
+        .single();
+
+      if (planError || !planData) throw planError || new Error('Plan no encontrado');
+
+      const businessId = business.id;
+      const now = new Date();
+      const nextMonth = new Date(now);
+      nextMonth.setMonth(nextMonth.getMonth() + 1);
+
+      // 3. Buscar suscripción existente
+      const { data: existingSub } = await supabase
+        .from('subscriptions')
+        .select('id')
+        .eq('business_id', businessId)
+        .maybeSingle();
+
+      let subscriptionId = existingSub?.id;
+
+      if (subscriptionId) {
+        // Actualizar suscripción existente
+        const { error: updateSubErr } = await supabase
+          .from('subscriptions')
+          .update({
+            plan_id: planData.id,
+            status: 'active',
+          })
+          .eq('id', subscriptionId);
+
+        if (updateSubErr) throw updateSubErr;
+      } else {
+        // Crear suscripción si no existía
+        const { data: newSub, error: insertSubErr } = await supabase
+          .from('subscriptions')
+          .insert({
+            business_id: businessId,
+            plan_id: planData.id,
+            status: 'active',
+            current_period_start: now.toISOString(),
+            current_period_end: nextMonth.toISOString(),
+          })
+          .select('id')
+          .single();
+
+        if (insertSubErr) throw insertSubErr;
+        subscriptionId = newSub.id;
+      }
+
+      // 4. Actualizar o crear billing_period activo
+      const { data: existingPeriod } = await supabase
+        .from('billing_periods')
+        .select('id')
+        .eq('business_id', businessId)
+        .eq('is_active', true)
+        .maybeSingle();
+
+      if (existingPeriod) {
+        const { error: updatePeriodErr } = await supabase
+          .from('billing_periods')
+          .update({
+            included_minutes: Number(planData.included_minutes),
+            subscription_id: subscriptionId,
+          })
+          .eq('id', existingPeriod.id);
+
+        if (updatePeriodErr) throw updatePeriodErr;
+      } else {
+        const { error: insertPeriodErr } = await supabase
+          .from('billing_periods')
+          .insert({
+            subscription_id: subscriptionId,
+            business_id: businessId,
+            start_date: now.toISOString(),
+            end_date: nextMonth.toISOString(),
+            included_minutes: Number(planData.included_minutes),
+            rollover_minutes: 0,
+            bonus_minutes: 0,
+            is_active: true,
+          });
+
+        if (insertPeriodErr) throw insertPeriodErr;
+      }
+
+      // 5. Asegurar que la cuenta del negocio esté activa
+      await supabase
+        .from('businesses')
+        .update({ 'Cuenta Activa': true })
+        .eq('id', businessId);
+
+      // 6. Recargar datos inmediatamente y volver a la vista principal
+      await fetchBillingData();
+      setSelectedPlanForConfirm(null);
+      setCurrentView('main');
+    } catch (err) {
+      console.error('Error al cambiar plan:', err);
+      alert('Hubo un error al actualizar el plan. Por favor intenta de nuevo.');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // Cancelar plan / Desactivar negocio
+  // Cancelar suscripción (pendiente para siguiente etapa)
   const handleCancelBilling = async () => {
-    // La cancelación se implementará en backend en una etapa posterior.
+    // No habilitado en esta etapa
   };
 
   // Guardar nueva tarjeta
@@ -406,36 +532,134 @@ export default function BillingModal({ slug, onClose }: BillingModalProps) {
         {/* VISTA 2: SELECCIONAR PLAN */}
         {currentView === 'change_plan' && (
           <div>
-            <h3 style={{ fontSize: '1.1rem', fontWeight: 800, marginBottom: '1rem' }}>Selecciona un nuevo Plan</h3>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.8rem', marginBottom: '1.5rem' }}>
-              {availablePlans.map((p) => (
-                <div key={p.id} style={{
-                  background: theme.cardBg, border: `1px solid ${theme.border}`,
-                  borderRadius: '12px', padding: '1rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', position: 'relative'
-                }}>
-                  <div>
-                    <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 800 }}>{p.name}</h4>
-                    <p style={{ margin: '0.4rem 0 0 0', fontSize: '1.1rem', fontWeight: 900, color: '#10b981' }}>{p.price}</p>
-                    <p style={{ margin: '0.4rem 0 1rem 0', fontSize: '0.72rem', color: theme.textSecondary }}>{p.minutes}</p>
-                  </div>
-                  <button
-                    onClick={() => handleSelectPlan(p)}
-                    disabled
-                    style={{
-                      width: '100%', padding: '0.55rem', borderRadius: '100px', border: 'none',
-                      background: theme.btnBg, color: theme.textPrimary,
-                      fontSize: '0.75rem', fontWeight: 700, cursor: 'not-allowed',
-                      opacity: 0.7
-                    }}
-                  >
-                    {loading ? 'Guardando...' : 'Elegir Plan'}
-                  </button>
-                </div>
-              ))}
+            <div style={{ marginBottom: '1.2rem' }}>
+              <h3 style={{ fontSize: '1.15rem', fontWeight: 800, margin: 0 }}>Selecciona un nuevo Plan</h3>
+              <p style={{ fontSize: '0.78rem', color: theme.textSecondary, margin: '0.3rem 0 0 0' }}>
+                Elige el plan comercial que mejor se adapte al volumen de tu negocio.
+              </p>
             </div>
-            <button onClick={() => setCurrentView('main')} style={{ background: 'transparent', border: 'none', color: theme.textSecondary, fontSize: '0.8rem', cursor: 'pointer' }}>
-              ← Volver
+
+            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${availablePlans.length || 3}, 1fr)`, gap: '0.8rem', marginBottom: '1.5rem' }}>
+              {availablePlans.map((p) => {
+                const isCurrent = currentPlan.name.trim().toLowerCase() === p.name.trim().toLowerCase();
+                return (
+                  <div key={p.id} style={{
+                    background: theme.cardBg,
+                    border: p.isRecommended ? '1.5px solid #10b981' : `1px solid ${theme.border}`,
+                    borderRadius: '14px',
+                    padding: '1.2rem 1rem',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                    position: 'relative',
+                    boxShadow: p.isRecommended ? '0 8px 20px -6px rgba(16, 185, 129, 0.25)' : 'none'
+                  }}>
+                    {p.isRecommended && (
+                      <span style={{
+                        position: 'absolute', top: '-10px', right: '12px',
+                        background: '#10b981', color: '#ffffff',
+                        fontSize: '0.62rem', fontWeight: 800,
+                        padding: '0.2rem 0.6rem', borderRadius: '100px',
+                        letterSpacing: '0.05em', textTransform: 'uppercase'
+                      }}>
+                        Recomendado
+                      </span>
+                    )}
+                    <div>
+                      <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800 }}>{p.name}</h4>
+                      <p style={{ margin: '0.4rem 0 0 0', fontSize: '1.2rem', fontWeight: 900, color: p.isRecommended ? '#10b981' : theme.textPrimary }}>
+                        {p.price}
+                      </p>
+                      <p style={{ margin: '0.3rem 0 1.2rem 0', fontSize: '0.75rem', color: theme.textSecondary, fontWeight: 600 }}>
+                        {p.minutes}
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        if (!isCurrent) {
+                          setSelectedPlanForConfirm(p);
+                          setCurrentView('confirm_plan');
+                        }
+                      }}
+                      disabled={isCurrent || loading}
+                      style={{
+                        width: '100%', padding: '0.6rem', borderRadius: '100px',
+                        border: isCurrent ? `1px solid ${theme.border}` : 'none',
+                        background: isCurrent ? theme.btnBg : (p.isRecommended ? '#10b981' : '#3b82f6'),
+                        color: isCurrent ? theme.textSecondary : '#ffffff',
+                        fontSize: '0.75rem', fontWeight: 700,
+                        cursor: isCurrent ? 'default' : 'pointer',
+                        transition: 'all 0.2s ease',
+                      }}
+                    >
+                      {isCurrent ? 'Plan Actual' : 'Seleccionar Plan'}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+
+            <button
+              onClick={() => setCurrentView('main')}
+              style={{
+                background: 'transparent', border: 'none', color: theme.textSecondary,
+                fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem'
+              }}
+            >
+              ← Volver al resumen
             </button>
+          </div>
+        )}
+
+        {/* VISTA 2.5: CONFIRMAR CAMBIO DE PLAN */}
+        {currentView === 'confirm_plan' && selectedPlanForConfirm && (
+          <div style={{ textAlign: 'center', padding: '1.5rem 0' }}>
+            <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>🔄</div>
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, margin: '0 0 0.5rem 0' }}>
+              ¿Confirmar cambio al plan {selectedPlanForConfirm.name}?
+            </h3>
+            <p style={{ fontSize: '0.82rem', color: theme.textSecondary, maxWidth: '420px', margin: '0 auto 1.2rem auto' }}>
+              Tu negocio pasará a contar con <strong style={{ color: theme.textPrimary }}>{selectedPlanForConfirm.minutes}</strong> por un valor de <strong style={{ color: '#10b981' }}>{selectedPlanForConfirm.price}</strong>.
+            </p>
+
+            <div style={{
+              background: theme.cardBg, border: `1px solid ${theme.border}`,
+              borderRadius: '12px', padding: '1rem', maxWidth: '380px', margin: '0 auto 1.5rem auto', textAlign: 'left'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem', fontSize: '0.8rem' }}>
+                <span style={{ color: theme.textSecondary }}>Plan actual:</span>
+                <strong style={{ color: theme.textPrimary }}>{currentPlan.name}</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
+                <span style={{ color: theme.textSecondary }}>Nuevo plan:</span>
+                <strong style={{ color: '#10b981' }}>{selectedPlanForConfirm.name} ({selectedPlanForConfirm.price})</strong>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+              <button
+                onClick={() => setCurrentView('change_plan')}
+                disabled={loading}
+                style={{
+                  padding: '0.7rem 1.5rem', borderRadius: '100px', border: `1px solid ${theme.border}`,
+                  background: theme.btnBg, color: theme.textPrimary, fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer'
+                }}
+              >
+                Volver
+              </button>
+              <button
+                onClick={() => executePlanChange(selectedPlanForConfirm)}
+                disabled={loading}
+                style={{
+                  padding: '0.7rem 1.8rem', borderRadius: '100px', border: 'none',
+                  background: '#10b981', color: '#ffffff', fontSize: '0.8rem', fontWeight: 700,
+                  cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1
+                }}
+              >
+                {loading ? 'Guardando cambio...' : 'Confirmar y Guardar'}
+              </button>
+            </div>
           </div>
         )}
 
