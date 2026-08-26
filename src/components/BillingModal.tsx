@@ -16,7 +16,6 @@ interface PlanOption {
   name: string;
   price: string;
   minutes: string;
-  badge?: string;
 }
 
 interface HistoryItem {
@@ -26,12 +25,6 @@ interface HistoryItem {
   amount: string;
   status: string;
 }
-
-const PLAN_OPTIONS: PlanOption[] = [
-  { id: 'normal', name: 'NORMAL', price: '$499 MXN/mes', minutes: '500 min incluidos' },
-  { id: 'pro', name: 'PRO', price: '$999 MXN/mes', minutes: '1,200 min incluidos', badge: 'RECOMENDADO' },
-  { id: 'premium', name: 'PREMIUM', price: '$1,899 MXN/mes', minutes: '3,000 min incluidos' },
-];
 
 export default function BillingModal({ slug, onClose }: BillingModalProps) {
   // Detección de Tema
@@ -48,12 +41,14 @@ export default function BillingModal({ slug, onClose }: BillingModalProps) {
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
   const [currentPlan, setCurrentPlan] = useState({
-    name: 'CARGANDO...',
-    price: '$0 MXN/mes',
+    name: '---',
+    price: '---',
     consumedMin: 0,
-    totalMin: 1,
-    status: 'ACTIVE'
+    totalMin: 0,
+    status: '---',
+    nextChargeDate: null as string | null,
   });
+  const [availablePlans, setAvailablePlans] = useState<PlanOption[]>([]);
 
   const [card, setCard] = useState<{ last4: string; brand: string } | null>({
     last4: '4242',
@@ -82,6 +77,38 @@ export default function BillingModal({ slug, onClose }: BillingModalProps) {
     if (!slug) return;
     setFetching(true);
     try {
+      const [{ data: plans, error: plansError }, metricsResponse] = await Promise.all([
+        supabase
+          .from('plans')
+          .select('id, name, price_mxn, included_minutes')
+          .eq('is_active', true)
+          .order('created_at', { ascending: true }),
+        fetch(`/api/metrics?business_slug=${encodeURIComponent(slug)}`),
+      ]);
+
+      if (plansError) throw plansError;
+      if (!metricsResponse.ok) throw new Error('No se pudo obtener el resumen de facturacion');
+
+      const billing = await metricsResponse.json();
+      setAvailablePlans(
+        (plans || []).map((plan) => ({
+          id: plan.id,
+          name: plan.name,
+          price: `$${Number(plan.price_mxn).toLocaleString('es-MX')} MXN/mes`,
+          minutes: `${Number(plan.included_minutes).toLocaleString('es-MX')} min incluidos`,
+        }))
+      );
+      setCurrentPlan({
+        name: billing.plan?.name || '---',
+        price: billing.plan ? `$${Number(billing.plan.priceMxn).toLocaleString('es-MX')} MXN/mes` : '---',
+        consumedMin: Number(billing.metrics?.usedMinutes) || 0,
+        totalMin: Number(billing.metrics?.totalMinutes) || 0,
+        status: billing.subscription?.status || '---',
+        nextChargeDate: billing.subscription?.currentPeriodEnd || null,
+      });
+      setHistory([]);
+      return;
+
       // 1. Obtener datos del negocio
       const { data: business, error: busError } = await supabase
         .from('businesses')
@@ -89,36 +116,37 @@ export default function BillingModal({ slug, onClose }: BillingModalProps) {
         .eq('enlace del panel', slug)
         .single();
 
-      if (busError || !business) throw busError;
+      if (busError || !business) throw busError || new Error('Negocio no encontrado');
 
       // 2. Obtener la suscripción e información del plan
       const { data: sub } = await supabase
         .from('subscriptions')
         .select('plan_id, plans(name, price, included_minutes)')
-        .eq('business_id', business.id)
+        .eq('business_id', business!.id)
         .maybeSingle();
 
       // 3. Obtener periodos de facturación históricos
       const { data: periods } = await supabase
         .from('billing_periods')
         .select('*')
-        .eq('business_id', business.id)
+        .eq('business_id', business!.id)
         .order('created_at', { ascending: false });
 
       const activePeriod = periods?.[0];
       const planInfo = sub?.plans as any;
 
       setCurrentPlan({
-        name: business.plan_actual || planInfo?.name || 'DEMO',
-        price: business.precio_plan || planInfo?.price || '$0 MXN/mes',
+        name: business!.plan_actual || planInfo?.name || 'DEMO',
+        price: business!.precio_plan || planInfo?.price || '$0 MXN/mes',
         consumedMin: activePeriod?.consumed_minutes || 0,
         totalMin: Number(planInfo?.included_minutes) || 200,
-        status: business['Cuenta Activa'] ? 'ACTIVE' : 'INACTIVE'
+        status: business!['Cuenta Activa'] ? 'ACTIVE' : 'INACTIVE',
+        nextChargeDate: null,
       });
 
-      if (periods && periods.length > 0) {
+      if (periods?.length) {
         setHistory(
-          periods.map((p: any) => ({
+          periods!.map((p: any) => ({
             id: p.id,
             period: p.start_date && p.end_date 
               ? `${new Date(p.start_date).toLocaleDateString()} - ${new Date(p.end_date).toLocaleDateString()}`
@@ -157,6 +185,10 @@ export default function BillingModal({ slug, onClose }: BillingModalProps) {
 
   // Guardar cambio de plan
   const handleSelectPlan = async (plan: PlanOption) => {
+    // El cambio de plan se implementarÃ¡ en backend en una etapa posterior.
+    void plan;
+    return;
+
     setLoading(true);
 
     try {
@@ -175,12 +207,12 @@ export default function BillingModal({ slug, onClose }: BillingModalProps) {
           .ilike('name', plan.name)
           .single();
 
-        if (planError || !planData) throw planError;
+        if (planError || !planData) throw planError || new Error('Plan no encontrado');
 
         const { error: subError } = await supabase
           .from('subscriptions')
-          .update({ plan_id: planData.id })
-          .eq('business_id', businessData.id);
+          .update({ plan_id: planData!.id })
+          .eq('business_id', businessData!.id);
 
         if (subError) throw subError;
 
@@ -191,7 +223,7 @@ export default function BillingModal({ slug, onClose }: BillingModalProps) {
             precio_plan: plan.price,
             'Cuenta Activa': true
           })
-          .eq('id', businessData.id);
+          .eq('id', businessData!.id);
 
         await fetchBillingData();
       }
@@ -205,6 +237,9 @@ export default function BillingModal({ slug, onClose }: BillingModalProps) {
 
   // Cancelar plan / Desactivar negocio
   const handleCancelBilling = async () => {
+    // La cancelaciÃ³n se implementarÃ¡ en backend en una etapa posterior.
+    return;
+
     setLoading(true);
     if (slug) {
       await supabase
@@ -332,6 +367,9 @@ export default function BillingModal({ slug, onClose }: BillingModalProps) {
                   <span style={{ fontSize: '1.8rem', fontWeight: 900, letterSpacing: '-0.03em' }}>{currentPlan.name}</span>
                   <span style={{ fontSize: '0.85rem', color: theme.textSecondary, fontWeight: 600 }}>{currentPlan.price}</span>
                 </div>
+                <p style={{ margin: '-0.35rem 0 0.8rem', fontSize: '0.72rem', color: theme.textSecondary }}>
+                  PrÃ³xima renovaciÃ³n: {currentPlan.nextChargeDate ? new Date(currentPlan.nextChargeDate).toLocaleDateString('es-MX') : '---'}
+                </p>
 
                 {/* Barra de Minutos */}
                 <div style={{ marginBottom: '1.2rem' }}>
@@ -479,19 +517,11 @@ export default function BillingModal({ slug, onClose }: BillingModalProps) {
           <div>
             <h3 style={{ fontSize: '1.1rem', fontWeight: 800, marginBottom: '1rem' }}>Selecciona un nuevo Plan</h3>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.8rem', marginBottom: '1.5rem' }}>
-              {PLAN_OPTIONS.map((p) => (
+              {availablePlans.map((p) => (
                 <div key={p.id} style={{
-                  background: theme.cardBg, border: `1px solid ${p.badge ? '#10b981' : theme.border}`,
+                  background: theme.cardBg, border: `1px solid ${theme.border}`,
                   borderRadius: '12px', padding: '1rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', position: 'relative'
                 }}>
-                  {p.badge && (
-                    <span style={{
-                      position: 'absolute', top: '-10px', right: '10px', background: '#10b981', color: '#fff',
-                      fontSize: '0.6rem', fontWeight: 800, padding: '0.15rem 0.5rem', borderRadius: '100px'
-                    }}>
-                      {p.badge}
-                    </span>
-                  )}
                   <div>
                     <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 800 }}>{p.name}</h4>
                     <p style={{ margin: '0.4rem 0 0 0', fontSize: '1.1rem', fontWeight: 900, color: '#10b981' }}>{p.price}</p>
@@ -499,12 +529,12 @@ export default function BillingModal({ slug, onClose }: BillingModalProps) {
                   </div>
                   <button
                     onClick={() => handleSelectPlan(p)}
-                    disabled={loading}
+                    disabled
                     style={{
                       width: '100%', padding: '0.55rem', borderRadius: '100px', border: 'none',
-                      background: p.badge ? '#10b981' : theme.btnBg, color: p.badge ? '#fff' : theme.textPrimary,
-                      fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer',
-                      opacity: loading ? 0.7 : 1
+                      background: theme.btnBg, color: theme.textPrimary,
+                      fontSize: '0.75rem', fontWeight: 700, cursor: 'not-allowed',
+                      opacity: 0.7
                     }}
                   >
                     {loading ? 'Guardando...' : 'Elegir Plan'}
@@ -538,11 +568,11 @@ export default function BillingModal({ slug, onClose }: BillingModalProps) {
               </button>
               <button
                 onClick={handleCancelBilling}
-                disabled={loading}
+                disabled
                 style={{
                   padding: '0.7rem 1.5rem', borderRadius: '100px', border: 'none',
-                  background: '#f43f5e', color: '#ffffff', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer',
-                  opacity: loading ? 0.7 : 1
+                  background: '#f43f5e', color: '#ffffff', fontSize: '0.8rem', fontWeight: 700, cursor: 'not-allowed',
+                  opacity: 0.7
                 }}
               >
                 {loading ? 'Eliminando...' : 'Eliminar Suscripción'}

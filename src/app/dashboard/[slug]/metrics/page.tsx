@@ -72,10 +72,9 @@ export default function MetricsPage() {
       setLoading(true)
 
       try {
-        const [{ data: ordersData }, resMetrics, { data: businessData }] = await Promise.all([
+        const [{ data: ordersData }, resMetrics] = await Promise.all([
           supabase.from('orders').select('*').eq('business_slug', slug),
           fetch(`/api/metrics?business_slug=${slug}`, { signal: controller.signal }),
-          supabase.from('businesses').select('id').eq('enlace del panel', slug).maybeSingle()
         ])
 
         if (ordersData) setAllOrders(ordersData)
@@ -83,26 +82,15 @@ export default function MetricsPage() {
         if (resMetrics.ok) {
           const metricsData = await resMetrics.json()
           setVapiMetrics(metricsData)
+          setBillingData({
+            includedMinutes: Number(metricsData.metrics?.includedMinutes) || 0,
+            rolloverMinutes: Number(metricsData.metrics?.rolloverMinutes) || 0,
+            bonusMinutes: Number(metricsData.metrics?.bonusMinutes) || 0,
+            endDate: metricsData.subscription?.currentPeriodEnd || null
+          })
         }
 
         // Obtener período activo de facturación para minutos y fecha de renovación
-        if (businessData?.id) {
-          const { data: activePeriod } = await supabase
-            .from('billing_periods')
-            .select('included_minutes, rollover_minutes, bonus_minutes, end_date')
-            .eq('business_id', businessData.id)
-            .eq('is_active', true)
-            .maybeSingle()
-
-          if (activePeriod) {
-            setBillingData({
-              includedMinutes: Number(activePeriod.included_minutes) || 0,
-              rolloverMinutes: Number(activePeriod.rollover_minutes) || 0,
-              bonusMinutes: Number(activePeriod.bonus_minutes) || 0,
-              endDate: activePeriod.end_date
-            })
-          }
-        }
       } catch (err: any) {
         if (err.name !== 'AbortError') {
           console.error('Error al cargar datos:', err)
@@ -201,9 +189,9 @@ export default function MetricsPage() {
   }, [tab, allOrders, calcularDatosTab])
 
   // --- CÁLCULOS REALES DE MINUTOS Y RENOVACIÓN ---
-  const usedMinutes = vapiMetrics?.metrics?.usedMinutes ?? 3
-  const totalMinutesPlan = billingData.includedMinutes + billingData.rolloverMinutes + billingData.bonusMinutes
-  const availableMinutes = Math.max(0, totalMinutesPlan - usedMinutes)
+  const usedMinutes = Number(vapiMetrics?.metrics?.usedMinutes) || 0
+  const totalMinutesPlan = Number(vapiMetrics?.metrics?.totalMinutes) || 0
+  const availableMinutes = Number(vapiMetrics?.metrics?.availableMinutes) || 0
   const percentageUsed = totalMinutesPlan > 0 ? Math.min(100, Math.max(0, (usedMinutes / totalMinutesPlan) * 100)) : 0
 
   // Formateador para la fecha de renovación
