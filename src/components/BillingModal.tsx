@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { createClient } from '@/lib/supabaseClient';
 
@@ -17,6 +17,14 @@ interface PlanOption {
   price: string;
   minutes: string;
   badge?: string;
+}
+
+interface HistoryItem {
+  id: string;
+  period: string;
+  minutes: string;
+  amount: string;
+  status: string;
 }
 
 const PLAN_OPTIONS: PlanOption[] = [
@@ -38,11 +46,12 @@ export default function BillingModal({ slug, onClose }: BillingModalProps) {
 
   // Estados de datos
   const [loading, setLoading] = useState(false);
+  const [fetching, setFetching] = useState(true);
   const [currentPlan, setCurrentPlan] = useState({
-    name: 'DEMO',
+    name: 'CARGANDO...',
     price: '$0 MXN/mes',
-    consumedMin: 3,
-    totalMin: 200,
+    consumedMin: 0,
+    totalMin: 1,
     status: 'ACTIVE'
   });
 
@@ -51,10 +60,7 @@ export default function BillingModal({ slug, onClose }: BillingModalProps) {
     brand: 'Visa'
   });
 
-  const [history] = useState([
-    { id: '1', period: '22/8/2026 - 22/9/2026', minutes: '200 min', amount: '$0.00 MXN', status: 'Pagado' },
-    { id: '2', period: '22/7/2026 - 22/8/2026', minutes: '200 min', amount: '$0.00 MXN', status: 'Pagado' }
-  ]);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
 
   // Formulario Tarjeta
   const [cardForm, setCardForm] = useState({ number: '', exp: '', cvv: '', name: '' });
@@ -71,13 +77,90 @@ export default function BillingModal({ slug, onClose }: BillingModalProps) {
     btnHover: isDark ? 'rgba(255, 255, 255, 0.12)' : '#cbd5e1'
   };
 
-  // Guardar cambio de plan (Actualiza 'subscriptions' para detonar el Trigger SQL en Supabase)
+  // Cargar datos de facturación desde Supabase
+  const fetchBillingData = useCallback(async () => {
+    if (!slug) return;
+    setFetching(true);
+    try {
+      // 1. Obtener datos del negocio
+      const { data: business, error: busError } = await supabase
+        .from('businesses')
+        .select('id, plan_actual, precio_plan, "Cuenta Activa"')
+        .eq('enlace del panel', slug)
+        .single();
+
+      if (busError || !business) throw busError;
+
+      // 2. Obtener la suscripción e información del plan
+      const { data: sub } = await supabase
+        .from('subscriptions')
+        .select('plan_id, plans(name, price, included_minutes)')
+        .eq('business_id', business.id)
+        .maybeSingle();
+
+      // 3. Obtener periodos de facturación históricos
+      const { data: periods } = await supabase
+        .from('billing_periods')
+        .select('*')
+        .eq('business_id', business.id)
+        .order('created_at', { ascending: false });
+
+      const activePeriod = periods?.[0];
+      const planInfo = sub?.plans as any;
+
+      setCurrentPlan({
+        name: business.plan_actual || planInfo?.name || 'DEMO',
+        price: business.precio_plan || planInfo?.price || '$0 MXN/mes',
+        consumedMin: activePeriod?.consumed_minutes || 0,
+        totalMin: Number(planInfo?.included_minutes) || 200,
+        status: business['Cuenta Activa'] ? 'ACTIVE' : 'INACTIVE'
+      });
+
+      if (periods && periods.length > 0) {
+        setHistory(
+          periods.map((p: any) => ({
+            id: p.id,
+            period: p.start_date && p.end_date 
+              ? `${new Date(p.start_date).toLocaleDateString()} - ${new Date(p.end_date).toLocaleDateString()}`
+              : 'Período Actual',
+            minutes: `${p.included_minutes || 0} min`,
+            amount: p.amount || '$0.00 MXN',
+            status: p.status || 'Pagado'
+          }))
+        );
+      }
+    } catch (err) {
+      console.error('Error al cargar datos de facturación:', err);
+    } finally {
+      setFetching(false);
+    }
+  }, [slug]);
+
+  useEffect(() => {
+    fetchBillingData();
+  }, [fetchBillingData]);
+
+  // Formateadores para la tarjeta
+  const handleCardNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value.replace(/\D/g, '').slice(0, 16);
+    const formatted = raw.replace(/(.{4})/g, '$1 ').trim();
+    setCardForm(prev => ({ ...prev, number: formatted }));
+  };
+
+  const handleExpChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let raw = e.target.value.replace(/\D/g, '').slice(0, 4);
+    if (raw.length >= 3) {
+      raw = `${raw.slice(0, 2)}/${raw.slice(2)}`;
+    }
+    setCardForm(prev => ({ ...prev, exp: raw }));
+  };
+
+  // Guardar cambio de plan
   const handleSelectPlan = async (plan: PlanOption) => {
     setLoading(true);
 
     try {
       if (slug) {
-        // 1. Obtener ID del negocio a partir del slug
         const { data: businessData, error: busError } = await supabase
           .from('businesses')
           .select('id')
@@ -86,7 +169,6 @@ export default function BillingModal({ slug, onClose }: BillingModalProps) {
 
         if (busError || !businessData) throw busError;
 
-        // 2. Obtener el ID y minutos del plan desde la tabla 'plans'
         const { data: planData, error: planError } = await supabase
           .from('plans')
           .select('id, included_minutes')
@@ -95,7 +177,6 @@ export default function BillingModal({ slug, onClose }: BillingModalProps) {
 
         if (planError || !planData) throw planError;
 
-        // 3. Actualizar plan_id en 'subscriptions' -> Esto activa el TRIGGER en Supabase que actualiza billing_periods
         const { error: subError } = await supabase
           .from('subscriptions')
           .update({ plan_id: planData.id })
@@ -103,23 +184,16 @@ export default function BillingModal({ slug, onClose }: BillingModalProps) {
 
         if (subError) throw subError;
 
-        // 4. Actualizar estado visible en la tabla businesses
         await supabase
           .from('businesses')
           .update({ 
             plan_actual: plan.name, 
-            precio_plan: plan.price 
+            precio_plan: plan.price,
+            'Cuenta Activa': true
           })
           .eq('id', businessData.id);
 
-        // Actualizar estado local UI
-        setCurrentPlan(prev => ({
-          ...prev,
-          name: plan.name,
-          price: plan.price,
-          totalMin: Number(planData.included_minutes) || (plan.id === 'normal' ? 500 : plan.id === 'pro' ? 1200 : 3000),
-          status: 'ACTIVE'
-        }));
+        await fetchBillingData();
       }
     } catch (err) {
       console.error('Error al actualizar plan en Supabase:', err);
@@ -129,16 +203,17 @@ export default function BillingModal({ slug, onClose }: BillingModalProps) {
     }
   };
 
-  // Cancelar plan / Desactivar negocio para Vapi
+  // Cancelar plan / Desactivar negocio
   const handleCancelBilling = async () => {
     setLoading(true);
     if (slug) {
       await supabase
         .from('businesses')
-        .update({ 'Cuenta Activa': false, plan_actual: 'SIN PLAN' })
+        .update({ 'Cuenta Activa': false, plan_actual: 'CANCELADO' })
         .eq('enlace del panel', slug);
+
+      await fetchBillingData();
     }
-    setCurrentPlan(prev => ({ ...prev, name: 'CANCELADO', status: 'INACTIVE', price: '$0 MXN' }));
     setLoading(false);
     setCurrentView('main');
   };
@@ -162,7 +237,7 @@ export default function BillingModal({ slug, onClose }: BillingModalProps) {
 
   // Simular descarga de PDF de factura
   const handleDownloadPDF = (period: string) => {
-    const content = `FACTURA DE SERVICIO - TACOS LUIS\nPeriodo: ${period}\nEstado: PAGADO\nRFC: XAXX010101000`;
+    const content = `FACTURA DE SERVICIO\nNegocio: ${slug}\nPeriodo: ${period}\nEstado: PAGADO\nRFC: XAXX010101000`;
     const blob = new Blob([content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -170,6 +245,11 @@ export default function BillingModal({ slug, onClose }: BillingModalProps) {
     a.download = `Factura_${period.replace(/\//g, '-')}.pdf`;
     a.click();
   };
+
+  const minPercentage = Math.min(
+    100,
+    Math.round((currentPlan.consumedMin / (currentPlan.totalMin || 1)) * 100)
+  );
 
   return (
     <motion.div
@@ -244,7 +324,7 @@ export default function BillingModal({ slug, onClose }: BillingModalProps) {
                     color: currentPlan.status === 'ACTIVE' ? '#10b981' : '#f43f5e',
                     border: `1px solid ${currentPlan.status === 'ACTIVE' ? 'rgba(16,185,129,0.3)' : 'rgba(244,63,94,0.3)'}`
                   }}>
-                    {currentPlan.status}
+                    {fetching ? '...' : currentPlan.status}
                   </span>
                 </div>
 
@@ -261,8 +341,9 @@ export default function BillingModal({ slug, onClose }: BillingModalProps) {
                   </div>
                   <div style={{ width: '100%', height: '6px', background: isDark ? 'rgba(255,255,255,0.08)' : '#cbd5e1', borderRadius: '10px', overflow: 'hidden' }}>
                     <div style={{
-                      width: `${(currentPlan.consumedMin / currentPlan.totalMin) * 100}%`,
-                      height: '100%', background: '#3b82f6', borderRadius: '10px'
+                      width: `${minPercentage}%`,
+                      height: '100%', background: '#3b82f6', borderRadius: '10px',
+                      transition: 'width 0.4s ease'
                     }} />
                   </div>
                 </div>
@@ -355,32 +436,38 @@ export default function BillingModal({ slug, onClose }: BillingModalProps) {
                 Historial de Períodos
               </span>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', flex: 1, overflowY: 'auto' }}>
-                {history.map((item) => (
-                  <div key={item.id} style={{
-                    background: isDark ? 'rgba(0,0,0,0.2)' : '#ffffff', border: `1px solid ${theme.border}`,
-                    borderRadius: '10px', padding: '0.8rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between'
-                  }}>
-                    <div>
-                      <p style={{ margin: 0, fontSize: '0.8rem', fontWeight: 700 }}>{item.period}</p>
-                      <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.7rem', color: theme.textSecondary }}>
-                        {item.minutes} incluidos — <span style={{ fontWeight: 700, color: theme.textPrimary }}>{item.amount}</span>
-                      </p>
-                    </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', flex: 1, overflowY: 'auto', maxHeight: '250px' }}>
+                {fetching ? (
+                  <p style={{ fontSize: '0.78rem', color: theme.textSecondary }}>Cargando historial...</p>
+                ) : history.length === 0 ? (
+                  <p style={{ fontSize: '0.78rem', color: theme.textSecondary, fontStyle: 'italic' }}>Sin historial registrado.</p>
+                ) : (
+                  history.map((item) => (
+                    <div key={item.id} style={{
+                      background: isDark ? 'rgba(0,0,0,0.2)' : '#ffffff', border: `1px solid ${theme.border}`,
+                      borderRadius: '10px', padding: '0.8rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between'
+                    }}>
+                      <div>
+                        <p style={{ margin: 0, fontSize: '0.8rem', fontWeight: 700 }}>{item.period}</p>
+                        <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.7rem', color: theme.textSecondary }}>
+                          {item.minutes} incluidos — <span style={{ fontWeight: 700, color: theme.textPrimary }}>{item.amount}</span>
+                        </p>
+                      </div>
 
-                    <button
-                      onClick={() => handleDownloadPDF(item.period)}
-                      style={{
-                        padding: '0.4rem 0.7rem', borderRadius: '8px', border: `1px solid ${theme.border}`,
-                        background: theme.btnBg, color: theme.textPrimary, fontSize: '0.68rem', fontWeight: 700,
-                        cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem'
-                      }}
-                      title="Descargar PDF para Facturación"
-                    >
-                      📄 PDF
-                    </button>
-                  </div>
-                ))}
+                      <button
+                        onClick={() => handleDownloadPDF(item.period)}
+                        style={{
+                          padding: '0.4rem 0.7rem', borderRadius: '8px', border: `1px solid ${theme.border}`,
+                          background: theme.btnBg, color: theme.textPrimary, fontSize: '0.68rem', fontWeight: 700,
+                          cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem'
+                        }}
+                        title="Descargar PDF para Facturación"
+                      >
+                        📄 PDF
+                      </button>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
 
@@ -431,7 +518,7 @@ export default function BillingModal({ slug, onClose }: BillingModalProps) {
           </div>
         )}
 
-        {/* VISTA 3: PREGUNTA CANCELAR / CAMBIAR */}
+        {/* VISTA 3: CANCELAR */}
         {currentView === 'cancel_confirm' && (
           <div style={{ textAlign: 'center', padding: '1rem 0' }}>
             <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>⚠️</div>
@@ -487,7 +574,7 @@ export default function BillingModal({ slug, onClose }: BillingModalProps) {
               maxLength={19}
               required
               value={cardForm.number}
-              onChange={e => setCardForm({ ...cardForm, number: e.target.value })}
+              onChange={handleCardNumberChange}
               style={{
                 width: '100%', padding: '0.75rem', borderRadius: '8px', border: `1px solid ${theme.border}`,
                 background: isDark ? 'rgba(0,0,0,0.2)' : '#ffffff', color: theme.textPrimary, outline: 'none'
@@ -501,7 +588,7 @@ export default function BillingModal({ slug, onClose }: BillingModalProps) {
                 maxLength={5}
                 required
                 value={cardForm.exp}
-                onChange={e => setCardForm({ ...cardForm, exp: e.target.value })}
+                onChange={handleExpChange}
                 style={{
                   padding: '0.75rem', borderRadius: '8px', border: `1px solid ${theme.border}`,
                   background: isDark ? 'rgba(0,0,0,0.2)' : '#ffffff', color: theme.textPrimary, outline: 'none'
@@ -513,7 +600,7 @@ export default function BillingModal({ slug, onClose }: BillingModalProps) {
                 maxLength={4}
                 required
                 value={cardForm.cvv}
-                onChange={e => setCardForm({ ...cardForm, cvv: e.target.value })}
+                onChange={e => setCardForm({ ...cardForm, cvv: e.target.value.replace(/\D/g, '').slice(0, 4) })}
                 style={{
                   padding: '0.75rem', borderRadius: '8px', border: `1px solid ${theme.border}`,
                   background: isDark ? 'rgba(0,0,0,0.2)' : '#ffffff', color: theme.textPrimary, outline: 'none'
