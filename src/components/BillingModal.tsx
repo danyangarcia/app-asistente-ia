@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { createClient } from '@/lib/supabaseClient';
 
 const supabase = createClient();
@@ -51,7 +51,7 @@ export default function BillingModal({ slug, onClose }: BillingModalProps) {
     brand: 'Visa'
   });
 
-  const [history, setHistory] = useState([
+  const [history] = useState([
     { id: '1', period: '22/8/2026 - 22/9/2026', minutes: '200 min', amount: '$0.00 MXN', status: 'Pagado' },
     { id: '2', period: '22/7/2026 - 22/8/2026', minutes: '200 min', amount: '$0.00 MXN', status: 'Pagado' }
   ]);
@@ -71,26 +71,62 @@ export default function BillingModal({ slug, onClose }: BillingModalProps) {
     btnHover: isDark ? 'rgba(255, 255, 255, 0.12)' : '#cbd5e1'
   };
 
-  // Guardar cambio de plan
+  // Guardar cambio de plan (Actualiza 'subscriptions' para detonar el Trigger SQL en Supabase)
   const handleSelectPlan = async (plan: PlanOption) => {
     setLoading(true);
-    // Actualización a Supabase
-    if (slug) {
-      await supabase
-        .from('businesses')
-        .update({ plan_actual: plan.name, precio_plan: plan.price })
-        .eq('enlace del panel', slug);
-    }
 
-    setCurrentPlan(prev => ({
-      ...prev,
-      name: plan.name,
-      price: plan.price,
-      totalMin: plan.id === 'normal' ? 500 : plan.id === 'pro' ? 1200 : 3000,
-      status: 'ACTIVE'
-    }));
-    setLoading(false);
-    setCurrentView('main');
+    try {
+      if (slug) {
+        // 1. Obtener ID del negocio a partir del slug
+        const { data: businessData, error: busError } = await supabase
+          .from('businesses')
+          .select('id')
+          .eq('enlace del panel', slug)
+          .single();
+
+        if (busError || !businessData) throw busError;
+
+        // 2. Obtener el ID y minutos del plan desde la tabla 'plans'
+        const { data: planData, error: planError } = await supabase
+          .from('plans')
+          .select('id, included_minutes')
+          .ilike('name', plan.name)
+          .single();
+
+        if (planError || !planData) throw planError;
+
+        // 3. Actualizar plan_id en 'subscriptions' -> Esto activa el TRIGGER en Supabase que actualiza billing_periods
+        const { error: subError } = await supabase
+          .from('subscriptions')
+          .update({ plan_id: planData.id })
+          .eq('business_id', businessData.id);
+
+        if (subError) throw subError;
+
+        // 4. Actualizar estado visible en la tabla businesses
+        await supabase
+          .from('businesses')
+          .update({ 
+            plan_actual: plan.name, 
+            precio_plan: plan.price 
+          })
+          .eq('id', businessData.id);
+
+        // Actualizar estado local UI
+        setCurrentPlan(prev => ({
+          ...prev,
+          name: plan.name,
+          price: plan.price,
+          totalMin: Number(planData.included_minutes) || (plan.id === 'normal' ? 500 : plan.id === 'pro' ? 1200 : 3000),
+          status: 'ACTIVE'
+        }));
+      }
+    } catch (err) {
+      console.error('Error al actualizar plan en Supabase:', err);
+    } finally {
+      setLoading(false);
+      setCurrentView('main');
+    }
   };
 
   // Cancelar plan / Desactivar negocio para Vapi
@@ -380,10 +416,11 @@ export default function BillingModal({ slug, onClose }: BillingModalProps) {
                     style={{
                       width: '100%', padding: '0.55rem', borderRadius: '100px', border: 'none',
                       background: p.badge ? '#10b981' : theme.btnBg, color: p.badge ? '#fff' : theme.textPrimary,
-                      fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer'
+                      fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer',
+                      opacity: loading ? 0.7 : 1
                     }}
                   >
-                    Elegir Plan
+                    {loading ? 'Guardando...' : 'Elegir Plan'}
                   </button>
                 </div>
               ))}
@@ -414,12 +451,14 @@ export default function BillingModal({ slug, onClose }: BillingModalProps) {
               </button>
               <button
                 onClick={handleCancelBilling}
+                disabled={loading}
                 style={{
                   padding: '0.7rem 1.5rem', borderRadius: '100px', border: 'none',
-                  background: '#f43f5e', color: '#ffffff', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer'
+                  background: '#f43f5e', color: '#ffffff', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer',
+                  opacity: loading ? 0.7 : 1
                 }}
               >
-                Eliminar Suscripción
+                {loading ? 'Eliminando...' : 'Eliminar Suscripción'}
               </button>
             </div>
           </div>
